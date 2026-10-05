@@ -299,6 +299,9 @@ function GeneratorInner() {
       if (msg.startsWith("NO_KEY:")) {
         setError(msg.replace("NO_KEY:", ""))
         pushMsg("agent", "Não encontrei nenhuma chave de API ativa. Configure o motor em Settings para eu poder gerar.")
+      } else if (msg.startsWith("AUTH:")) {
+        setError(msg.replace("AUTH:", ""))
+        pushMsg("agent", `Erro de Autenticação na API: chave em falta ou inválida. Verifique a chave em Settings — a geração foi interrompida antes de qualquer fatia correr.`)
       } else {
         setError(msg)
         pushMsg("agent", `Falha na geração: ${msg}`)

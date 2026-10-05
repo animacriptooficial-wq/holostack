@@ -56,7 +56,12 @@ export function getStoredKeys(): Record<string, string> {
   if (typeof window === "undefined") return {}
   try {
     const raw = localStorage.getItem(KEYS_STORAGE)
-    return raw ? (JSON.parse(raw) as Record<string, string>) : {}
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, string>
+    /* Chaves vazias ou só com espaços não contam — evita 401 silencioso */
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, v]) => typeof v === "string" && v.trim().length > 0)
+    )
   } catch {
     return {}
   }
@@ -64,8 +69,8 @@ export function getStoredKeys(): Record<string, string> {
 
 export function saveStoredKey(providerId: string, key: string) {
   const keys = getStoredKeys()
-  if (key) {
-    keys[providerId] = key
+  if (key && key.trim()) {
+    keys[providerId] = key.trim()
   } else {
     delete keys[providerId]
   }
@@ -232,6 +237,12 @@ export function parseModelOutput(raw: string): ParsedModelOutput {
   return out
 }
 
+function authError(providerName: string, status: number): Error {
+  return new Error(
+    `AUTH:Erro de Autenticação na API (${providerName}): chave de API em falta ou inválida — HTTP ${status}. Verifique a chave em /settings.`
+  )
+}
+
 async function callOpenAICompatible(
   provider: ProviderConfig,
   key: string,
@@ -243,7 +254,7 @@ async function callOpenAICompatible(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
+      Authorization: `Bearer ${key.trim()}`,
       ...(provider.id === "luna"
         ? { "HTTP-Referer": "https://holostack-one.vercel.app", "X-Title": "HoloStack" }
         : {}),
@@ -258,6 +269,9 @@ async function callOpenAICompatible(
       max_tokens: maxTokens,
     }),
   })
+  if (res.status === 401 || res.status === 403) {
+    throw authError(provider.name, res.status)
+  }
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`${provider.name} retornou ${res.status}: ${body.slice(0, 200)}`)
@@ -290,6 +304,9 @@ async function callAnthropic(
       messages: [{ role: "user", content: userPrompt }],
     }),
   })
+  if (res.status === 401 || res.status === 403) {
+    throw authError("Anthropic", res.status)
+  }
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`Anthropic retornou ${res.status}: ${body.slice(0, 200)}`)
@@ -316,6 +333,13 @@ async function callGoogle(
       generationConfig: { temperature: 0.6, maxOutputTokens: maxTokens },
     }),
   })
+  if (res.status === 401 || res.status === 403 || res.status === 400) {
+    const body = await res.text()
+    if (res.status !== 400 || /key|auth|credential/i.test(body)) {
+      throw authError("Google", res.status)
+    }
+    throw new Error(`Google retornou 400: ${body.slice(0, 200)}`)
+  }
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`Google retornou ${res.status}: ${body.slice(0, 200)}`)

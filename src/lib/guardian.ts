@@ -147,11 +147,20 @@ export async function runGuardedGeneration(options: GuardedOptions): Promise<Pso
     } catch (err) {
       lastError = err instanceof Error ? err.message : "Erro desconhecido"
 
-      /* Sem chave de API não há recuperação possível — propaga já */
+      /* Falhas de autenticação não são recuperáveis por retry —
+         propagam imediatamente sem desperdiçar corridas */
       if (lastError.startsWith("NO_KEY:")) {
         watchdog.mark("ai-provider", "down", "nenhuma chave de API configurada")
         throw err
       }
+      if (lastError.startsWith("AUTH:")) {
+        watchdog.mark("ai-provider", "down", "401 — chave em falta ou inválida")
+        emitGuardian(
+          `⛨ Rollstack Guardian: ${lastError.replace("AUTH:", "")}`
+        )
+        throw err
+      }
+      watchdog.mark("ai-provider", "ok", "autenticação válida")
 
       watchdog.mark("pso-engine", "down", `corrida ${run} falhou: ${lastError.slice(0, 80)}`)
 

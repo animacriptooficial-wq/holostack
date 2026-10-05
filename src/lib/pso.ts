@@ -1,6 +1,6 @@
 "use client"
 
-import { callModel, parseModelOutput, GeneratedFile, GenerationMode } from "./engine"
+import { callModel, parseModelOutput, resolveProvider, GeneratedFile, GenerationMode } from "./engine"
 
 /* ============================================================
    PSO — Prompt Slicing & Optimization
@@ -268,7 +268,16 @@ export async function runPsoGeneration(options: {
   let providerUsed = ""
   let modelUsed = ""
 
-  emit("info", `Motor PSO ativado — pedido fatiado em 4 micro-tarefas atómicas`)
+  /* PRÉ-VOO: bloqueia o arranque se não existir chave válida —
+     nenhuma fatia corre sem autenticação garantida */
+  const preflight = resolveProvider(providerId)
+  if (!preflight) {
+    emit("error", "Nenhuma chave de API configurada — configure em /settings antes de gerar")
+    throw new Error(
+      "NO_KEY:Nenhuma chave de API configurada. Vá a /settings e adicione a chave do GPT-5.6 Luna ou de outro motor."
+    )
+  }
+  emit("info", `Motor PSO ativado — ${preflight.provider.name} (${preflight.provider.model}) autenticado · pedido fatiado em 4 micro-tarefas`)
 
   for (const slice of PSO_SLICES) {
     const status = slices[slice.id - 1]
@@ -337,9 +346,9 @@ export async function runPsoGeneration(options: {
         break
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Erro desconhecido"
-        if (msg.startsWith("NO_KEY:")) {
+        if (msg.startsWith("NO_KEY:") || msg.startsWith("AUTH:")) {
           status.status = "failed"
-          emit("error", msg.replace("NO_KEY:", ""), { sliceId: slice.id })
+          emit("error", msg.replace(/^(NO_KEY|AUTH):/, ""), { sliceId: slice.id })
           throw err
         }
         sliceErrors = [msg]
