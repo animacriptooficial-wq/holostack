@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import Header from "@/components/layout/Header"
 import Sidebar from "@/components/layout/Sidebar"
 import PSOStatus from "@/components/dashboard/PSOStatus"
@@ -39,6 +40,7 @@ import {
 } from "lucide-react"
 
 export default function Dashboard() {
+  const router = useRouter()
   const [prompt, setPrompt] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState("all")
@@ -243,8 +245,7 @@ export default function Dashboard() {
 
   const handleCreate = () => {
     if (prompt.trim()) {
-      console.log("Creating project:", prompt)
-      setPrompt("")
+      router.push(`/generator?type=site&prompt=${encodeURIComponent(prompt.trim())}`)
     }
   }
 
@@ -430,7 +431,7 @@ export default function Dashboard() {
 
             {/* Universal Program Generator CTA */}
             <div className="mt-10">
-              <Link href="/generator" className="block group">
+              <Link href="/generator?type=program" className="block group">
                 <div className="relative overflow-hidden rounded-2xl border border-primary bg-gradient-to-r from-surface2 via-surface to-surface2 p-10 text-center transition-all duration-300 hover:shadow-glow-gold-lg hover:border-accent">
                   <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/10 to-primary/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                   <div className="relative z-10 flex flex-col items-center gap-4">

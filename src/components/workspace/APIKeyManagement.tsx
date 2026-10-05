@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { getStoredKeys, saveStoredKey } from "@/lib/engine"
 import { Key, Eye, EyeOff, Save, CheckCircle2, AlertCircle, Plus, Trash2, Zap, Moon } from "lucide-react"
 
 interface APIKeyData {
@@ -83,8 +84,23 @@ export default function APIKeyManagement() {
   const [lunaVisible, setLunaVisible] = useState(false)
   const [lunaSaved, setLunaSaved] = useState(false)
 
+  useEffect(() => {
+    const stored = getStoredKeys()
+    setLunaKey(stored.luna || "")
+    setLunaSaved(Boolean(stored.luna))
+    setApiKeys((prev) => {
+      const next = { ...prev }
+      for (const id of Object.keys(next)) {
+        const key = stored[id] || ""
+        next[id] = { ...next[id], key, status: key ? "configured" : "not-configured" }
+      }
+      return next
+    })
+  }, [])
+
   const handleSaveLuna = () => {
     if (!lunaKey.trim()) return
+    saveStoredKey("luna", lunaKey.trim())
     setLunaSaved(true)
   }
 
@@ -104,11 +120,12 @@ export default function APIKeyManagement() {
   }
 
   const handleSaveKey = (providerId: string) => {
-    console.log(`Saving API key for ${providerId}:`, apiKeys[providerId].key)
+    saveStoredKey(providerId, apiKeys[providerId].key.trim())
     setEditingProvider(null)
   }
 
   const handleDeleteKey = (providerId: string) => {
+    saveStoredKey(providerId, "")
     setApiKeys((prev) => ({
       ...prev,
       [providerId]: {
