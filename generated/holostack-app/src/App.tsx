@@ -1,7 +1,8 @@
 import React from 'react';
-import CarList from './components/CarList';
 import Header from './components/Header';
+import CarList from './components/CarList';
 import { useCars } from './hooks/useCars';
+import './App.css';
 
 const App: React.FC = () => {
   const { cars } = useCars();
