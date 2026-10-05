@@ -1,0 +1,11 @@
+body { margin: 0; font-family: Arial, sans-serif; background-color: #121212; color: #ffffff; }
+.app-container { padding: 20px; }
+.header { background-color: #333333; padding: 10px; }
+.header ul { list-style: none; padding: 0; }
+.header ul li { display: inline; margin-right: 15px; }
+.header ul li a { color: #ffffff; text-decoration: none; }
+.car-list, .car-details { margin-top: 20px; }
+.car-list ul { list-style: none; padding: 0; }
+.car-list ul li { margin-bottom: 10px; }
+.car-list ul li a { color: #1e90ff; text-decoration: none; }
+.car-details { background-color: #1e1e1e; padding: 15px; border-radius: 5px; }
