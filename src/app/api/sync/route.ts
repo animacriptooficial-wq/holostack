@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { execFileSync } from "child_process"
 import fs from "fs/promises"
+import { existsSync, readdirSync } from "fs"
 import path from "path"
 
 export const runtime = "nodejs"
@@ -17,10 +18,6 @@ interface SyncRequest {
   sliceId?: number
 }
 
-const GIT_BIN =
-  process.env.HOLOSTACK_GIT ||
-  "C:\\Users\\tete1\\AppData\\Local\\GitHubDesktop\\app-3.6.6\\resources\\app\\git\\cmd\\git.exe"
-
 function safeSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 80) || "project"
 }
@@ -33,9 +30,54 @@ function safeRelativePath(p: string): string | null {
   return normalized
 }
 
-function runGit(args: string[], cwd: string): { ok: boolean; output: string } {
+/* Resolve o binário git de forma robusta:
+   1. `git` do PATH do sistema
+   2. HOLOSTACK_GIT (env)
+   3. GitHub Desktop bundled — qualquer app-* (a versão muda a cada update) */
+function resolveGit(): string | null {
+  const candidates: string[] = []
+
+  if (process.env.HOLOSTACK_GIT) candidates.push(process.env.HOLOSTACK_GIT)
+  candidates.push("git") // PATH global
+
   try {
-    const output = execFileSync(GIT_BIN, args, {
+    const desktopRoot = path.join(
+      process.env.LOCALAPPDATA || "",
+      "GitHubDesktop"
+    )
+    if (existsSync(desktopRoot)) {
+      const appDirs = readdirSync(desktopRoot)
+        .filter((d) => /^app-/.test(d))
+        .sort()
+        .reverse() // versão mais recente primeiro
+      for (const dir of appDirs) {
+        candidates.push(
+          path.join(desktopRoot, dir, "resources", "app", "git", "cmd", "git.exe")
+        )
+      }
+    }
+  } catch {
+    /* sem acesso ao dir — segue com os candidatos anteriores */
+  }
+
+  for (const candidate of candidates) {
+    try {
+      execFileSync(candidate, ["--version"], {
+        encoding: "utf-8",
+        timeout: 10000,
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+      return candidate
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
+function runGit(gitBin: string, args: string[], cwd: string): { ok: boolean; output: string } {
+  try {
+    const output = execFileSync(gitBin, args, {
       cwd,
       encoding: "utf-8",
       timeout: 60000,
@@ -58,7 +100,7 @@ export async function POST(req: Request) {
   try {
     body = await req.json()
   } catch {
-    return NextResponse.json({ ok: false, log: ["Pedido inválido"] }, { status: 400 })
+    return NextResponse.json({ ok: false, written: 0, log: ["Pedido inválido"] }, { status: 400 })
   }
 
   const projectName = safeSegment(body.projectName || "holostack-app")
@@ -68,10 +110,15 @@ export async function POST(req: Request) {
   const root = process.cwd()
   const targetDir = path.join(root, "generated", projectName)
 
-  /* 1. Escrever ficheiros físicos */
+  /* ─────────────────────────────────────────────────────────────
+     FASE 1 — GRAVAÇÃO FÍSICA (totalmente isolada do git)
+     Cada ficheiro é gravado de forma independente: a falha de um
+     nunca aborta os restantes, e NADA nesta fase depende do git.
+  ───────────────────────────────────────────────────────────── */
   let written = 0
-  try {
-    for (const file of files) {
+  let writePhaseFailed = false
+  for (const file of files) {
+    try {
       const rel = safeRelativePath(file.path)
       if (!rel) {
         log.push(`✗ caminho inválido ignorado: ${file.path}`)
@@ -85,48 +132,59 @@ export async function POST(req: Request) {
       await fs.mkdir(path.dirname(fullPath), { recursive: true })
       await fs.writeFile(fullPath, file.content, "utf-8")
       written++
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "falha de escrita"
+      log.push(`✗ falha ao gravar ${file.path}: ${msg}`)
+      writePhaseFailed = true
+      /* continua para os restantes ficheiros — nunca aborta */
     }
-    log.push(`✓ ${written}/${files.length} ficheiros escritos em generated/${projectName}`)
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "falha de escrita"
-    log.push(`✗ Escrita de ficheiros falhou: ${msg}`)
-    return NextResponse.json(
-      { ok: false, phase: "write", log },
-      { status: 500 }
+  }
+  log.push(`✓ ${written}/${files.length} ficheiros escritos em generated/${projectName}`)
+
+  /* ─────────────────────────────────────────────────────────────
+     FASE 2 — GIT (opcional; qualquer falha aqui é apenas warning,
+     os ficheiros já estão garantidos no disco)
+  ───────────────────────────────────────────────────────────── */
+  const gitBin = resolveGit()
+  if (!gitBin) {
+    log.push(`· git não encontrado (PATH/env/GitHub Desktop) — ficheiros gravados, sync pendente`)
+    return NextResponse.json({
+      ok: !writePhaseFailed,
+      phase: "write",
+      written,
+      gitSkipped: true,
+      log,
+    })
+  }
+
+  const add = runGit(gitBin, ["add", "-A", "generated/"], root)
+  log.push(add.ok ? `✓ git add . — staging completo` : `✗ git add falhou: ${add.output.split("\n")[0]}`)
+
+  if (add.ok) {
+    const commitMsg = `feat(holostack): auto-build [Fatia ${sliceId}] - verified & self-healed`
+    const commit = runGit(gitBin, ["commit", "-m", commitMsg], root)
+    const nothingToCommit = /nothing to commit|working tree clean/i.test(commit.output)
+    log.push(
+      commit.ok
+        ? `✓ git commit — "${commitMsg}"`
+        : nothingToCommit
+        ? `· git commit — sem alterações novas`
+        : `✗ git commit falhou: ${commit.output.split("\n")[0]}`
     )
-  }
 
-  /* 2. git add */
-  const add = runGit(["add", "-A", "generated/"], root)
-  log.push(add.ok ? `✓ git add . — staging completo` : `✗ git add falhou: ${add.output}`)
-  if (!add.ok) {
-    return NextResponse.json({ ok: false, phase: "git-add", log }, { status: 500 })
-  }
-
-  /* 3. git commit */
-  const commitMsg = `feat(holostack): auto-build [Fatia ${sliceId}] - verified & self-healed`
-  const commit = runGit(["commit", "-m", commitMsg], root)
-  const nothingToCommit = /nothing to commit|working tree clean/i.test(commit.output)
-  log.push(
-    commit.ok
-      ? `✓ git commit — "${commitMsg}"`
-      : nothingToCommit
-      ? `· git commit — sem alterações novas`
-      : `✗ git commit falhou: ${commit.output.split("\n")[0]}`
-  )
-
-  /* 4. git push */
-  const push = runGit(["push", "origin", "main"], root)
-  if (push.ok) {
-    log.push(`✓ git push origin main — repositório sincronizado`)
+    const push = runGit(gitBin, ["push", "origin", "main"], root)
+    if (push.ok) {
+      log.push(`✓ git push origin main — repositório sincronizado`)
+    } else {
+      const reason = /authentication|Invalid username|403|could not read/i.test(push.output)
+        ? "falha de autenticação GitHub (credenciais ausentes)"
+        : push.output.split("\n")[0]
+      log.push(`✗ git push falhou: ${reason}`)
+      log.push(`· ficheiros gravados e commitados localmente — push pendente`)
+    }
   } else {
-    const reason = /authentication|Invalid username|403/i.test(push.output)
-      ? "falha de autenticação GitHub (token/credenciais ausentes)"
-      : push.output.split("\n")[0]
-    log.push(`✗ git push falhou: ${reason}`)
-    log.push(`· ficheiros commitados localmente — push pendente`)
-    return NextResponse.json({ ok: false, phase: "git-push", log, written }, { status: 200 })
+    log.push(`· pipeline git abortado — ficheiros permanecem gravados no disco`)
   }
 
-  return NextResponse.json({ ok: true, log, written })
+  return NextResponse.json({ ok: !writePhaseFailed, phase: "sync", written, log })
 }
