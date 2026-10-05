@@ -14,6 +14,7 @@ HoloStack-PSO is a unified AI-powered development ecosystem with a Midnight Carb
 ## Deployment
 - **Production**: https://holostack-one.vercel.app (Vercel project `holostack/holostack`, team `holostack`)
 - Admin panel: https://holostack-one.vercel.app/x7k2m9q4-admin
+- **GitHub**: https://github.com/animacriptooficial-wq/holostack (branch `main`, synced)
 - Deploy command: `vercel --prod --yes` (Vercel CLI authenticated as `animacriptooficial-5430`)
 - Deployment protection (SSO) is disabled — site is publicly accessible
 
