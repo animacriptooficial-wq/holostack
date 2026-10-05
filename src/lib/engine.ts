@@ -243,113 +243,6 @@ function authError(providerName: string, status: number): Error {
   )
 }
 
-async function callOpenAICompatible(
-  provider: ProviderConfig,
-  key: string,
-  systemPrompt: string,
-  userPrompt: string,
-  maxTokens: number
-): Promise<string> {
-  const res = await fetch(provider.endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${key.trim()}`,
-      ...(provider.id === "luna"
-        ? { "HTTP-Referer": "https://holostack-one.vercel.app", "X-Title": "HoloStack" }
-        : {}),
-    },
-    body: JSON.stringify({
-      model: provider.model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.6,
-      max_tokens: maxTokens,
-    }),
-  })
-  if (res.status === 401 || res.status === 403) {
-    throw authError(provider.name, res.status)
-  }
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`${provider.name} retornou ${res.status}: ${body.slice(0, 200)}`)
-  }
-  const data = await res.json()
-  const content = data?.choices?.[0]?.message?.content
-  if (!content) throw new Error(`${provider.name} retornou resposta vazia`)
-  return content as string
-}
-
-async function callAnthropic(
-  provider: ProviderConfig,
-  key: string,
-  systemPrompt: string,
-  userPrompt: string,
-  maxTokens: number
-): Promise<string> {
-  const res = await fetch(provider.endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: provider.model,
-      system: systemPrompt,
-      max_tokens: maxTokens,
-      messages: [{ role: "user", content: userPrompt }],
-    }),
-  })
-  if (res.status === 401 || res.status === 403) {
-    throw authError("Anthropic", res.status)
-  }
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`Anthropic retornou ${res.status}: ${body.slice(0, 200)}`)
-  }
-  const data = await res.json()
-  const content = data?.content?.[0]?.text
-  if (!content) throw new Error("Anthropic retornou resposta vazia")
-  return content as string
-}
-
-async function callGoogle(
-  provider: ProviderConfig,
-  key: string,
-  systemPrompt: string,
-  userPrompt: string,
-  maxTokens: number
-): Promise<string> {
-  const res = await fetch(`${provider.endpoint}?key=${encodeURIComponent(key)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      generationConfig: { temperature: 0.6, maxOutputTokens: maxTokens },
-    }),
-  })
-  if (res.status === 401 || res.status === 403 || res.status === 400) {
-    const body = await res.text()
-    if (res.status !== 400 || /key|auth|credential/i.test(body)) {
-      throw authError("Google", res.status)
-    }
-    throw new Error(`Google retornou 400: ${body.slice(0, 200)}`)
-  }
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`Google retornou ${res.status}: ${body.slice(0, 200)}`)
-  }
-  const data = await res.json()
-  const content = data?.candidates?.[0]?.content?.parts?.[0]?.text
-  if (!content) throw new Error("Google retornou resposta vazia")
-  return content as string
-}
-
 export interface ModelResponse {
   text: string
   provider: string
@@ -370,11 +263,35 @@ export async function callModel(options: {
   }
   const { provider, key } = resolved
   const maxTokens = options.maxTokens ?? 16000
-  const text =
-    provider.id === "anthropic"
-      ? await callAnthropic(provider, key, options.systemPrompt, options.userPrompt, maxTokens)
-      : provider.id === "google"
-      ? await callGoogle(provider, key, options.systemPrompt, options.userPrompt, maxTokens)
-      : await callOpenAICompatible(provider, key, options.systemPrompt, options.userPrompt, maxTokens)
-  return { text, provider: provider.name, model: provider.model }
+
+  /* Chamada via proxy server-side /api/generate — elimina CORS
+     e garante headers de autenticação construídos no servidor */
+  let res: Response
+  try {
+    res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        providerId: provider.id,
+        key,
+        systemPrompt: options.systemPrompt,
+        userPrompt: options.userPrompt,
+        maxTokens,
+      }),
+    })
+  } catch (err) {
+    throw new Error(
+      `Falha de rede ao contactar o motor (${provider.name}): ${err instanceof Error ? err.message : "erro"}`
+    )
+  }
+
+  const data = await res.json().catch(() => ({ ok: false, error: `resposta inválida (${res.status})` }))
+
+  if (!res.ok || !data.ok) {
+    if (res.status === 401 || res.status === 403) {
+      throw authError(provider.name, res.status)
+    }
+    throw new Error((data.error as string) || `${provider.name} falhou (${res.status})`)
+  }
+  return { text: data.text as string, provider: provider.name, model: data.model || provider.model }
 }
