@@ -1,0 +1,21 @@
+{
+  "name": "modtre-site",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "start": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "zustand": "^4.1.0",
+    "lucide-react": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.26",
+    "typescript": "^4.9.4",
+    "tailwindcss": "^3.2.4",
+    "vite": "^4.0.0"
+  }
+}
