@@ -1,1 +1,0 @@
-{"providerId":"openai","systemPrompt":"Respond ONLY with a single valid JSON object - no markdown. Shape: { \"files\": [{ \"path\": \"src/hello.ts\", \"content\": \"COMPLETE file content\" }] }. Generate a tiny hello-world TypeScript file.","userPrompt":"criar um site de carros","maxTokens":300}
