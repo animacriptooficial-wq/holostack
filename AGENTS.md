@@ -67,6 +67,9 @@ The selector UI with 10 interactive buttons is at `/x7k2m9q4-admin/appearance`.
 - `src/lib/theme.tsx` — theme context/provider
 - `src/lib/auth.tsx` — auth context/provider
 - `src/lib/totp.ts` — TOTP implementation
+- `src/lib/engine.ts` — Universal Generation Engine: real API calls to OpenAI/Anthropic/Gemini/OpenRouter (Luna), reads keys from `localStorage["holostack_api_keys"]`
+- `src/lib/pso.ts` — PSO (Prompt Slicing & Optimization): 4-slice pipeline (Arquitetura → Core Logic → Interface → Integração) with static validation (JSON parse, bracket balance, HTML DOMParser, TODO detection) and self-healing retry loop (max 3 attempts/slice)
+- `src/app/api/sync/route.ts` — Server route: writes generated files to `generated/<project>/` and runs `git add/commit/push` (local dev only — serverless can't write/exec)
 - `src/lib/navigation.ts` — route definitions
 - `src/lib/utils.ts` — `cn()` class merging utility
 
