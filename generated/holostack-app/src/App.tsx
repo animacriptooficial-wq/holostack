@@ -1,16 +1,14 @@
 import React from 'react';
 import Header from './components/Header';
-import CarList from './components/CarList';
-import { useCars } from './hooks/useCars';
-import './App.css';
+import MainContent from './components/MainContent';
+import Footer from './components/Footer';
 
 const App: React.FC = () => {
-  const { cars } = useCars();
-
   return (
-    <div className="app">
+    <div style={{ backgroundColor: '#121212', color: '#fff', fontFamily: 'Arial, sans-serif', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
       <Header />
-      <CarList cars={cars} />
+      <MainContent />
+      <Footer />
     </div>
   );
 };
