@@ -16,19 +16,6 @@ export interface GenerationResult {
 
 export type GenerationMode = "site" | "program"
 
-export type EnginePhase =
-  | "checking-keys"
-  | "connecting"
-  | "generating"
-  | "parsing"
-  | "done"
-  | "error"
-
-export interface EngineEvent {
-  phase: EnginePhase
-  detail: string
-}
-
 const KEYS_STORAGE = "holostack_api_keys"
 
 export interface ProviderConfig {
@@ -100,33 +87,7 @@ export function resolveProvider(
   return null
 }
 
-function buildSystemPrompt(mode: GenerationMode, platforms: string[]): string {
-  const base = `You are HoloStack Engine, an industrial-grade code generation system. You translate any user request into a complete, working project.
-
-CRITICAL OUTPUT RULE: Respond with a SINGLE valid JSON object and NOTHING else. No markdown fences, no commentary before or after. The JSON must have this exact shape:
-{
-  "projectName": "kebab-case-name",
-  "plan": "A concise explanation in Portuguese of what you built, the architecture and technologies used",
-  "previewHtml": "a COMPLETE standalone HTML document (with inline <style> and <script>) that renders a polished, working, visually impressive live version of the app",
-  "files": [{ "path": "relative/path.ext", "content": "full file content" }]
-}`
-
-  if (mode === "site") {
-    return `${base}
-
-The user wants a WEBSITE / WEB APP.
-- previewHtml: must be a complete HTML5 document with embedded CSS and JS — modern, responsive, dark themed with elegant accent colors. It must work standalone in an iframe with zero external dependencies (CDN links for fonts/tailwind are allowed).
-- files: generate the complete Next.js/React project structure (package.json, app files, components, styles) — every file complete, never truncated.`
-  }
-
-  return `${base}
-
-The user wants a MULTI-PLATFORM PROGRAM for: ${platforms.join(", ")}.
-- previewHtml: must be a complete HTML5 document that reproduces the program's running interface — a real, functional-looking app window with working buttons, menus, lists and state simulated in JS. It must work standalone in an iframe.
-- files: generate the complete project (package.json with dependencies react, typescript, tailwindcss, @tauri-apps/api, @capacitor/core, vite, zustand, lucide-react; src/main.tsx, src/App.tsx, src/store.ts, src-tauri/tauri.conf.json, capacitor.config.ts, etc.) — every file complete, never truncated.`
-}
-
-function extractJson(raw: string): unknown {
+export function extractJson(raw: string): unknown {
   let text = raw.trim()
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (fence) text = fence[1].trim()
@@ -140,7 +101,8 @@ async function callOpenAICompatible(
   provider: ProviderConfig,
   key: string,
   systemPrompt: string,
-  userPrompt: string
+  userPrompt: string,
+  maxTokens: number
 ): Promise<string> {
   const res = await fetch(provider.endpoint, {
     method: "POST",
@@ -158,7 +120,7 @@ async function callOpenAICompatible(
         { role: "user", content: userPrompt },
       ],
       temperature: 0.6,
-      max_tokens: 16000,
+      max_tokens: maxTokens,
     }),
   })
   if (!res.ok) {
@@ -175,7 +137,8 @@ async function callAnthropic(
   provider: ProviderConfig,
   key: string,
   systemPrompt: string,
-  userPrompt: string
+  userPrompt: string,
+  maxTokens: number
 ): Promise<string> {
   const res = await fetch(provider.endpoint, {
     method: "POST",
@@ -188,7 +151,7 @@ async function callAnthropic(
     body: JSON.stringify({
       model: provider.model,
       system: systemPrompt,
-      max_tokens: 8192,
+      max_tokens: maxTokens,
       messages: [{ role: "user", content: userPrompt }],
     }),
   })
@@ -206,7 +169,8 @@ async function callGoogle(
   provider: ProviderConfig,
   key: string,
   systemPrompt: string,
-  userPrompt: string
+  userPrompt: string,
+  maxTokens: number
 ): Promise<string> {
   const res = await fetch(`${provider.endpoint}?key=${encodeURIComponent(key)}`, {
     method: "POST",
@@ -214,7 +178,7 @@ async function callGoogle(
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      generationConfig: { temperature: 0.6, maxOutputTokens: 16000 },
+      generationConfig: { temperature: 0.6, maxOutputTokens: maxTokens },
     }),
   })
   if (!res.ok) {
@@ -227,59 +191,31 @@ async function callGoogle(
   return content as string
 }
 
-async function callProvider(
-  provider: ProviderConfig,
-  key: string,
-  systemPrompt: string,
-  userPrompt: string
-): Promise<string> {
-  if (provider.id === "anthropic") return callAnthropic(provider, key, systemPrompt, userPrompt)
-  if (provider.id === "google") return callGoogle(provider, key, systemPrompt, userPrompt)
-  return callOpenAICompatible(provider, key, systemPrompt, userPrompt)
+export interface ModelResponse {
+  text: string
+  provider: string
+  model: string
 }
 
-export async function generateProject(options: {
-  prompt: string
-  mode: GenerationMode
-  platforms?: string[]
+export async function callModel(options: {
+  systemPrompt: string
+  userPrompt: string
   providerId?: string
-  onEvent?: (event: EngineEvent) => void
-}): Promise<GenerationResult> {
-  const { prompt, mode, platforms = ["web"], providerId, onEvent } = options
-  const emit = (phase: EnginePhase, detail: string) => onEvent?.({ phase, detail })
-
-  emit("checking-keys", "A procurar chaves de API configuradas...")
-  const resolved = resolveProvider(providerId)
+  maxTokens?: number
+}): Promise<ModelResponse> {
+  const resolved = resolveProvider(options.providerId)
   if (!resolved) {
-    emit("error", "Nenhuma chave de API configurada")
     throw new Error(
       "NO_KEY:Nenhuma chave de API configurada. Vá a /settings e adicione a chave do GPT-5.6 Luna ou de outro motor."
     )
   }
-
   const { provider, key } = resolved
-  emit("connecting", `A ligar a ${provider.name} (${provider.model})...`)
-
-  const systemPrompt = buildSystemPrompt(mode, platforms)
-  const userPrompt = `Pedido do utilizador: "${prompt}". Gere o projeto completo agora.`
-
-  emit("generating", `O motor ${provider.name} está a gerar o projeto...`)
-  const raw = await callProvider(provider, key, systemPrompt, userPrompt)
-
-  emit("parsing", "A compilar e estruturar os ficheiros gerados...")
-  const parsed = extractJson(raw) as Partial<GenerationResult>
-
-  if (!parsed.previewHtml || !Array.isArray(parsed.files)) {
-    throw new Error("Resposta do motor incompleta — tente novamente")
-  }
-
-  emit("done", "Projeto gerado com sucesso")
-  return {
-    projectName: parsed.projectName || "holostack-app",
-    plan: parsed.plan || "Projeto gerado pelo HoloStack Engine.",
-    files: parsed.files,
-    previewHtml: parsed.previewHtml,
-    provider: provider.name,
-    model: provider.model,
-  }
+  const maxTokens = options.maxTokens ?? 16000
+  const text =
+    provider.id === "anthropic"
+      ? await callAnthropic(provider, key, options.systemPrompt, options.userPrompt, maxTokens)
+      : provider.id === "google"
+      ? await callGoogle(provider, key, options.systemPrompt, options.userPrompt, maxTokens)
+      : await callOpenAICompatible(provider, key, options.systemPrompt, options.userPrompt, maxTokens)
+  return { text, provider: provider.name, model: provider.model }
 }

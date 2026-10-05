@@ -6,12 +6,12 @@ import Link from "next/link"
 import Header from "@/components/layout/Header"
 import Sidebar from "@/components/layout/Sidebar"
 import {
-  generateProject,
-  GenerationResult,
-  GenerationMode,
-  EngineEvent,
-  resolveProvider,
-} from "@/lib/engine"
+  runPsoGeneration,
+  PSO_SLICES,
+  SliceStatus,
+  PsoResult,
+} from "@/lib/pso"
+import { GenerationMode, GeneratedFile, resolveProvider } from "@/lib/engine"
 import {
   Monitor,
   Apple,
@@ -32,6 +32,7 @@ import {
   Eye,
   Hammer,
   RotateCcw,
+  GitBranch,
 } from "lucide-react"
 
 interface Platform {
@@ -80,9 +81,12 @@ function GeneratorInner() {
   const [prompt, setPrompt] = useState(searchParams.get("prompt") || "")
   const [followUp, setFollowUp] = useState("")
   const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<GenerationResult | null>(null)
+  const [result, setResult] = useState<PsoResult | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [buildLog, setBuildLog] = useState<string[]>([])
+  const [files, setFiles] = useState<GeneratedFile[]>([])
+  const [previewHtml, setPreviewHtml] = useState("")
+  const [sliceStatus, setSliceStatus] = useState<SliceStatus[]>([])
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"preview" | "files" | "build">("preview")
   const [activeFile, setActiveFile] = useState<string | null>(null)
@@ -90,48 +94,104 @@ function GeneratorInner() {
   const [mounted, setMounted] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const autoStarted = useRef(false)
+  const projectNameRef = useRef("holostack-app")
 
   useEffect(() => setMounted(true), [])
 
   const pushMsg = (role: ChatMessage["role"], text: string) =>
     setMessages((prev) => [...prev, { role, text, time: now() }])
 
+  const pushLog = (line: string) => setBuildLog((prev) => [...prev, `[${now()}] ${line}`])
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
+
+  const syncSlice = async (projectName: string, sliceId: number, allFiles: GeneratedFile[]): Promise<string[]> => {
+    try {
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectName,
+          sliceId,
+          files: allFiles,
+        }),
+      })
+      const data = await res.json()
+      return Array.isArray(data.log) ? data.log : ["sync: sem resposta"]
+    } catch (err) {
+      return [
+        `✗ Sync indisponível: ${err instanceof Error ? err.message : "erro de rede"}`,
+        "· (em produção serverless a escrita de ficheiros/git não está disponível)",
+      ]
+    }
+  }
 
   const runGeneration = async (userPrompt: string, currentMode: GenerationMode, plats: string[]) => {
     if (busy) return
     setBusy(true)
     setError(null)
     setBuildLog([])
+    setFiles([])
+    setPreviewHtml("")
+    setResult(null)
+    setSliceStatus(
+      PSO_SLICES.map((s) => ({
+        id: s.id,
+        name: s.name,
+        status: "pending",
+        attempts: 0,
+        errors: [],
+        fileCount: 0,
+      }))
+    )
     pushMsg("user", userPrompt)
 
-    const onEvent = (e: EngineEvent) => {
-      pushMsg("agent", e.detail)
-      setBuildLog((prev) => [...prev, `[${now()}] ${e.detail}`])
-    }
-
     try {
-      const res = await generateProject({
+      const res = await runPsoGeneration({
         prompt: userPrompt,
         mode: currentMode,
         platforms: plats,
-        onEvent,
+        onEvent: (e) => {
+          pushLog(e.text)
+          if (e.type === "sync") {
+            pushMsg("system", `⎇ ${e.text}`)
+            return
+          }
+          if (e.type === "preview") {
+            setPreviewHtml(e.previewHtml || "")
+            return
+          }
+          if (e.type === "files") {
+            setFiles(e.files || [])
+            setActiveFile(e.files?.[0]?.path || null)
+            return
+          }
+          pushMsg(e.type === "info" ? "system" : "agent", e.text)
+          if (e.sliceId) {
+            setSliceStatus((prev) =>
+              prev.map((s) => {
+                if (s.id !== e.sliceId) return s
+                if (e.type === "slice-start") return { ...s, status: "running" }
+                if (e.type === "slice-retry") return { ...s, status: "healing", attempts: s.attempts + 1 }
+                if (e.type === "slice-verified") return { ...s, status: "verified" }
+                if (e.type === "slice-warning") return { ...s, status: "warning" }
+                return s
+              })
+            )
+          }
+        },
+        onSliceSync: (sliceId, allFiles) => syncSlice(projectNameRef.current, sliceId, allFiles),
       })
       setResult(res)
-      setActiveFile(res.files[0]?.path || null)
+      projectNameRef.current = res.projectName
       setActiveTab("preview")
       pushMsg("agent", res.plan)
       pushMsg(
         "system",
-        `Projeto "${res.projectName}" gerado por ${res.provider} · ${res.files.length} ficheiros · preview ao vivo disponível`
+        `Projeto "${res.projectName}" concluído · ${res.provider} · ${res.files.length} ficheiros · PSO 4/4`
       )
-      setBuildLog((prev) => [
-        ...prev,
-        `[${now()}] Compilação concluída — ${res.files.length} ficheiros`,
-        ...res.files.map((f) => `[${now()}] ✓ ${f.path}`),
-      ])
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido"
       if (msg.startsWith("NO_KEY:")) {
@@ -141,7 +201,7 @@ function GeneratorInner() {
         setError(msg)
         pushMsg("agent", `Falha na geração: ${msg}`)
       }
-      setBuildLog((prev) => [...prev, `[${now()}] ✗ ${msg}`])
+      pushLog(`✗ ${msg}`)
     } finally {
       setBusy(false)
     }
@@ -167,10 +227,10 @@ function GeneratorInner() {
   }
 
   const handleFollowUp = () => {
-    if (!followUp.trim() || !result) return
-    const refinement = `${prompt} — Refinamento: ${followUp.trim()}`
+    if (!followUp.trim()) return
+    const base = result ? `${prompt} — Refinamento: ${followUp.trim()}` : followUp.trim()
     setFollowUp("")
-    runGeneration(refinement, mode, selectedPlatforms)
+    runGeneration(base, mode, selectedPlatforms)
   }
 
   const copyFile = (content: string) => {
@@ -180,7 +240,15 @@ function GeneratorInner() {
   }
 
   const inStudio = result !== null || busy || messages.length > 0
-  const selectedFile = result?.files.find((f) => f.path === activeFile)
+  const selectedFile = files.find((f) => f.path === activeFile)
+  const sliceIcon = (s: SliceStatus) => {
+    if (s.status === "verified") return <CheckCircle2 className="w-4 h-4 text-success" />
+    if (s.status === "healing") return <Loader2 className="w-4 h-4 text-warning animate-spin" />
+    if (s.status === "running") return <Loader2 className="w-4 h-4 text-accent animate-spin" />
+    if (s.status === "warning") return <AlertCircle className="w-4 h-4 text-warning" />
+    if (s.status === "failed") return <AlertCircle className="w-4 h-4 text-error" />
+    return <div className="w-4 h-4 rounded-full border border-border" />
+  }
 
   /* ============ SETUP SCREEN ============ */
   if (!inStudio) {
@@ -192,14 +260,13 @@ function GeneratorInner() {
           <main className="pt-24 pb-8 px-8">
             <div className="max-w-5xl mx-auto">
               <div className="text-center mb-8">
-                <span className="badge-gold inline-block mb-4">HoloStack Engine</span>
+                <span className="badge-gold inline-block mb-4">HoloStack PSO Engine</span>
                 <h1 className="text-3xl font-bold text-text mb-2">Gerador Universal</h1>
                 <p className="text-textSecondary">
-                  O motor traduz qualquer pedido num projeto completo — sites, apps e programas multiplataforma.
+                  Fatiamento PSO em 4 micro-tarefas · autocorreção em loop fechado · sync GitHub automático
                 </p>
               </div>
 
-              {/* Mode toggle */}
               <div className="grid grid-cols-2 gap-3 mb-6">
                 <button
                   onClick={() => setMode("site")}
@@ -223,7 +290,6 @@ function GeneratorInner() {
                 </button>
               </div>
 
-              {/* Platforms (program mode) */}
               {mode === "program" && (
                 <>
                   <div className="card mb-6">
@@ -270,27 +336,36 @@ function GeneratorInner() {
                 </>
               )}
 
-              {/* Engine status */}
-              <div className="card mb-6 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Bot className="w-5 h-5 text-accent" />
-                  <div>
-                    <p className="text-sm font-medium text-text">Motor de geração</p>
-                    <p className="text-xs text-textSecondary">
-                      {mounted && resolveProvider()
-                        ? `${resolveProvider()!.provider.name} (${resolveProvider()!.provider.model}) pronto`
-                        : "Nenhuma chave configurada"}
-                    </p>
-                  </div>
+              <div className="card mb-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <GitBranch className="w-5 h-5 text-accent" />
+                  <h3 className="text-sm font-semibold text-textSecondary uppercase tracking-wider">
+                    Pipeline PSO — 4 fatias atómicas
+                  </h3>
                 </div>
-                {mounted && !resolveProvider() && (
-                  <Link href="/settings" className="btn-secondary text-sm">
-                    Configurar chave
-                  </Link>
-                )}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {PSO_SLICES.map((s) => (
+                    <div key={s.id} className="bg-surface2 border border-border rounded-lg p-3">
+                      <span className="text-[10px] font-bold text-accent">FATIA {s.id}</span>
+                      <p className="text-xs font-medium text-text mt-1">{s.name}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <p className="text-xs text-textSecondary">
+                    Motor:{" "}
+                    {mounted && resolveProvider()
+                      ? `${resolveProvider()!.provider.name} (${resolveProvider()!.provider.model})`
+                      : "nenhuma chave configurada"}
+                  </p>
+                  {mounted && !resolveProvider() && (
+                    <Link href="/settings" className="btn-secondary text-xs !py-1.5">
+                      Configurar chave
+                    </Link>
+                  )}
+                </div>
               </div>
 
-              {/* Prompt */}
               <div className="glass-card p-1">
                 <div className="bg-surface rounded-xl p-5">
                   <textarea
@@ -315,7 +390,7 @@ function GeneratorInner() {
                       className="btn-primary flex items-center gap-2 px-8 py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Wand2 className="w-5 h-5" />
-                      <span>Gerar com o motor</span>
+                      <span>Gerar com PSO</span>
                     </button>
                   </div>
                 </div>
@@ -334,8 +409,31 @@ function GeneratorInner() {
       <div className="flex-1 ml-64">
         <Header />
         <main className="pt-20 h-screen flex flex-col">
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden">
+          {/* Slice progress bar */}
+          <div className="px-5 py-3 border-b border-border bg-surface/60 flex items-center gap-3 shrink-0">
+            <span className="text-xs font-semibold text-textSecondary uppercase tracking-wider">PSO</span>
+            {sliceStatus.map((s) => (
+              <div
+                key={s.id}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs transition-all ${
+                  s.status === "verified"
+                    ? "border-success/40 bg-success/10"
+                    : s.status === "running" || s.status === "healing"
+                    ? "border-primary/50 bg-surface2"
+                    : s.status === "warning"
+                    ? "border-warning/40 bg-warning/10"
+                    : "border-border bg-surface2/50"
+                }`}
+              >
+                {sliceIcon(s)}
+                <span className={s.status === "pending" ? "text-textSecondary" : "text-text"}>
+                  {s.id}. {s.name}
+                </span>
+              </div>
+            ))}
+          </div>
 
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden">
             {/* LEFT — Agent Chat */}
             <div className="flex flex-col border-r border-border bg-surface/50">
               <div className="px-5 py-3 border-b border-border flex items-center justify-between">
@@ -349,6 +447,9 @@ function GeneratorInner() {
                     setResult(null)
                     setMessages([])
                     setBuildLog([])
+                    setFiles([])
+                    setPreviewHtml("")
+                    setSliceStatus([])
                     setError(null)
                     setPrompt("")
                   }}
@@ -364,11 +465,7 @@ function GeneratorInner() {
                   <div key={i} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
                     <div
                       className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        msg.role === "agent"
-                          ? "bg-accent"
-                          : msg.role === "user"
-                          ? "bg-surface3"
-                          : "bg-surface2"
+                        msg.role === "agent" ? "bg-accent" : msg.role === "user" ? "bg-surface3" : "bg-surface2"
                       }`}
                     >
                       {msg.role === "agent" ? (
@@ -399,14 +496,13 @@ function GeneratorInner() {
                       <Loader2 className="w-4 h-4 text-black animate-spin" />
                     </div>
                     <div className="bg-surface2 border border-border rounded-xl px-4 py-2.5 text-sm text-textSecondary">
-                      A trabalhar...
+                      A processar fatia...
                     </div>
                   </div>
                 )}
                 <div ref={chatEndRef} />
               </div>
 
-              {/* Follow-up input */}
               <div className="p-4 border-t border-border">
                 <div className="flex gap-2">
                   <input
@@ -418,7 +514,7 @@ function GeneratorInner() {
                     className="flex-1 bg-surface2 border border-border rounded-lg px-4 py-2.5 text-sm text-text placeholder-textSecondary focus:outline-none focus:border-primary disabled:opacity-50"
                   />
                   <button
-                    onClick={() => (result ? handleFollowUp() : runGeneration(followUp, mode, selectedPlatforms))}
+                    onClick={handleFollowUp}
                     disabled={busy || !followUp.trim()}
                     className="btn-primary !px-4 disabled:opacity-50"
                   >
@@ -453,7 +549,7 @@ function GeneratorInner() {
                   }`}
                 >
                   <FolderTree className="w-3.5 h-3.5" />
-                  Ficheiros {result ? `(${result.files.length})` : ""}
+                  Ficheiros {files.length > 0 ? `(${files.length})` : ""}
                 </button>
                 <button
                   onClick={() => setActiveTab("build")}
@@ -462,14 +558,13 @@ function GeneratorInner() {
                   }`}
                 >
                   <Hammer className="w-3.5 h-3.5" />
-                  Build
+                  Build & Sync
                 </button>
               </div>
 
               <div className="flex-1 overflow-hidden p-4">
                 {activeTab === "preview" && (
                   <div className="h-full flex flex-col rounded-xl overflow-hidden border border-border">
-                    {/* App window chrome */}
                     <div className="bg-surface2 px-4 py-2 flex items-center gap-2 border-b border-border shrink-0">
                       <div className="flex gap-1.5">
                         <span className="w-3 h-3 rounded-full bg-error/80" />
@@ -477,12 +572,14 @@ function GeneratorInner() {
                         <span className="w-3 h-3 rounded-full bg-success/80" />
                       </div>
                       <span className="text-xs text-textSecondary font-mono ml-2 truncate">
-                        {result ? `${result.projectName} — aplicação em execução` : "a aguardar geração"}
+                        {previewHtml
+                          ? `${result?.projectName || "projeto"} — aplicação em execução`
+                          : "a aguardar fatia 3 (interface)"}
                       </span>
                     </div>
-                    {result ? (
+                    {previewHtml ? (
                       <iframe
-                        srcDoc={result.previewHtml}
+                        srcDoc={previewHtml}
                         title="Preview ao vivo"
                         sandbox="allow-scripts allow-same-origin"
                         className="flex-1 w-full bg-white"
@@ -492,7 +589,9 @@ function GeneratorInner() {
                         {busy ? (
                           <>
                             <Loader2 className="w-8 h-8 text-accent animate-spin" />
-                            <p className="text-sm text-textSecondary">A construir a aplicação em tempo real...</p>
+                            <p className="text-sm text-textSecondary">
+                              A construir... o preview ativa-se na fatia 3 (Interface)
+                            </p>
                           </>
                         ) : (
                           <>
@@ -509,8 +608,8 @@ function GeneratorInner() {
                   <div className="h-full grid grid-cols-5 gap-3">
                     <div className="col-span-2 bg-surface2 rounded-xl border border-border p-3 overflow-y-auto scrollbar-thin">
                       <p className="text-xs font-semibold text-textSecondary uppercase mb-2 px-1">Árvore</p>
-                      {result ? (
-                        result.files.map((f) => (
+                      {files.length > 0 ? (
+                        files.map((f) => (
                           <button
                             key={f.path}
                             onClick={() => setActiveFile(f.path)}
@@ -556,7 +655,7 @@ function GeneratorInner() {
                         </p>
                       ))
                     ) : (
-                      <p className="text-xs text-textSecondary">O log de build aparece aqui</p>
+                      <p className="text-xs text-textSecondary">O log de build e sync Git aparece aqui</p>
                     )}
                   </div>
                 )}
