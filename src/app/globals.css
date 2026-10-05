@@ -1,0 +1,580 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   HoloStack — Theme Engine (10 temas controlados por data-theme)
+   ============================================================ */
+
+/* 1. Midnight Carbon & Gold (default) */
+:root,
+html[data-theme="carbon"] {
+  --background: #030305;
+  --background-edge: #0d0d12;
+  --surface: #000000;
+  --surface2: #161617;
+  --surface3: #232326;
+  --primary: #f59e0b;
+  --primaryDark: #d97706;
+  --accent: #fbbf24;
+  --text: #ffffff;
+  --textSecondary: #a8a8b0;
+  --border: rgba(251, 191, 36, 0.16);
+  --glow: rgba(251, 191, 36, 0.35);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+}
+
+/* 2. Cyberpunk Neon Cyan */
+html[data-theme="cyber"] {
+  --background: #020617;
+  --background-edge: #0a1128;
+  --surface: #050a18;
+  --surface2: #0a1428;
+  --surface3: #122240;
+  --primary: #06b6d4;
+  --primaryDark: #0891b2;
+  --accent: #22d3ee;
+  --text: #e0f7ff;
+  --textSecondary: #7fa8c9;
+  --border: rgba(34, 211, 238, 0.22);
+  --glow: rgba(34, 211, 238, 0.45);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #fb7185;
+}
+
+/* 3. Obsidian & Emerald */
+html[data-theme="obsidian"] {
+  --background: #020504;
+  --background-edge: #0a120c;
+  --surface: #030906;
+  --surface2: #0a1a12;
+  --surface3: #123022;
+  --primary: #10b981;
+  --primaryDark: #059669;
+  --accent: #34d399;
+  --text: #eafff5;
+  --textSecondary: #8fae9d;
+  --border: rgba(52, 211, 153, 0.2);
+  --glow: rgba(16, 185, 129, 0.4);
+  --success: #34d399;
+  --warning: #f59e0b;
+  --error: #ef4444;
+}
+
+/* 4. Royal Purple & Platinum */
+html[data-theme="royal"] {
+  --background: #0a0612;
+  --background-edge: #170c28;
+  --surface: #0c0716;
+  --surface2: #170e2c;
+  --surface3: #241845;
+  --primary: #8b5cf6;
+  --primaryDark: #7c3aed;
+  --accent: #c4b5fd;
+  --text: #f3f0ff;
+  --textSecondary: #a99fc7;
+  --border: rgba(196, 181, 253, 0.22);
+  --glow: rgba(139, 92, 246, 0.45);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #f43f5e;
+}
+
+/* 5. Crimson Matrix & Dark */
+html[data-theme="crimson"] {
+  --background: #0a0205;
+  --background-edge: #18030b;
+  --surface: #0c0206;
+  --surface2: #1c0810;
+  --surface3: #2e0f1c;
+  --primary: #e11d48;
+  --primaryDark: #be123c;
+  --accent: #fb7185;
+  --text: #fff1f2;
+  --textSecondary: #b38a93;
+  --border: rgba(251, 113, 133, 0.22);
+  --glow: rgba(225, 29, 72, 0.45);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #fb7185;
+}
+
+/* 6. Arctic Frost & Ice Blue */
+html[data-theme="arctic"] {
+  --background: #04101e;
+  --background-edge: #0a2038;
+  --surface: #071627;
+  --surface2: #0d2438;
+  --surface3: #153550;
+  --primary: #0ea5e9;
+  --primaryDark: #0284c7;
+  --accent: #7dd3fc;
+  --text: #f0f9ff;
+  --textSecondary: #93aec6;
+  --border: rgba(125, 211, 252, 0.22);
+  --glow: rgba(56, 189, 248, 0.4);
+  --success: #34d399;
+  --warning: #fbbf24;
+  --error: #fb7185;
+}
+
+/* 7. Solar Amber & Charcoal */
+html[data-theme="solar"] {
+  --background: #0c0a08;
+  --background-edge: #1a1510;
+  --surface: #0f0c09;
+  --surface2: #1d1712;
+  --surface3: #2c241b;
+  --primary: #f97316;
+  --primaryDark: #ea580c;
+  --accent: #fb923c;
+  --text: #fff7ed;
+  --textSecondary: #b5a394;
+  --border: rgba(251, 146, 60, 0.22);
+  --glow: rgba(249, 115, 22, 0.4);
+  --success: #10b981;
+  --warning: #fbbf24;
+  --error: #ef4444;
+}
+
+/* 8. Matrix Digital Green */
+html[data-theme="matrix"] {
+  --background: #010401;
+  --background-edge: #03140a;
+  --surface: #010b04;
+  --surface2: #052012;
+  --surface3: #0a3520;
+  --primary: #00cc35;
+  --primaryDark: #00a52b;
+  --accent: #00ff41;
+  --text: #d3ffdd;
+  --textSecondary: #7da88a;
+  --border: rgba(0, 255, 65, 0.2);
+  --glow: rgba(0, 255, 65, 0.35);
+  --success: #00ff41;
+  --warning: #fbbf24;
+  --error: #f43f5e;
+}
+
+/* 9. Sunset Orange & Deep Purple */
+html[data-theme="sunset"] {
+  --background: #12061e;
+  --background-edge: #200a32;
+  --surface: #150826;
+  --surface2: #221038;
+  --surface3: #341a52;
+  --primary: #f97316;
+  --primaryDark: #ea580c;
+  --accent: #fb923c;
+  --text: #fdf4ff;
+  --textSecondary: #b39ec9;
+  --border: rgba(251, 146, 60, 0.25);
+  --glow: rgba(249, 115, 22, 0.42);
+  --success: #34d399;
+  --warning: #fbbf24;
+  --error: #fb7185;
+}
+
+/* 10. Minimalist Titanium & Silver */
+html[data-theme="titanium"] {
+  --background: #101013;
+  --background-edge: #1c1d21;
+  --surface: #151517;
+  --surface2: #202126;
+  --surface3: #2e3037;
+  --primary: #e2e8f0;
+  --primaryDark: #cbd5e1;
+  --accent: #f1f5f9;
+  --text: #f8fafc;
+  --textSecondary: #9aa3ad;
+  --border: rgba(226, 232, 240, 0.16);
+  --glow: rgba(226, 232, 240, 0.28);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--background-edge);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+body::before,
+body::after {
+  display: none;
+}
+
+/* ============================================================
+   Efeitos de fundo por tema
+   ============================================================ */
+
+/* 1. Carbon — radial depth gradient */
+html[data-theme="carbon"] body {
+  background-image: radial-gradient(
+    ellipse at 50% 40%,
+    var(--background) 0%,
+    var(--background-edge) 75%
+  );
+  background-attachment: fixed;
+}
+
+/* 2. Cyber — neon grid + radial haze */
+html[data-theme="cyber"] body {
+  background-image: radial-gradient(
+    ellipse at 50% 30%,
+    var(--background-edge) 0%,
+    var(--background) 70%
+  );
+  background-attachment: fixed;
+}
+html[data-theme="cyber"] body::before {
+  display: block;
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+html[data-theme="cyber"] body::after {
+  display: block;
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 50% -10%, rgba(34, 211, 238, 0.1) 0%, transparent 45%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 3. Obsidian — emerald ambient glow */
+html[data-theme="obsidian"] body {
+  background-image: radial-gradient(
+    ellipse at 50% 45%,
+    var(--background) 0%,
+    var(--background-edge) 75%
+  );
+  background-attachment: fixed;
+}
+html[data-theme="obsidian"] body::before {
+  display: block;
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(52, 211, 153, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 80% 85%, rgba(16, 185, 129, 0.08) 0%, transparent 40%);
+  filter: blur(40px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 4. Royal — imperial purple radial */
+html[data-theme="royal"] body {
+  background-image: radial-gradient(
+    ellipse at 50% 35%,
+    var(--background-edge) 0%,
+    var(--background) 70%
+  );
+  background-attachment: fixed;
+}
+html[data-theme="royal"] body::before {
+  display: block;
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 50% 0%, rgba(196, 181, 253, 0.07) 0%, transparent 45%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 5. Crimson — red dot matrix */
+html[data-theme="crimson"] body {
+  background-image: radial-gradient(
+    ellipse at 50% 45%,
+    var(--background) 0%,
+    var(--background-edge) 75%
+  );
+  background-attachment: fixed;
+}
+html[data-theme="crimson"] body::before {
+  display: block;
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(rgba(251, 113, 133, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 6. Arctic — frost gradient + ice grid */
+html[data-theme="arctic"] body {
+  background-image: linear-gradient(160deg, var(--background-edge) 0%, var(--background) 60%);
+  background-attachment: fixed;
+}
+html[data-theme="arctic"] body::before {
+  display: block;
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(125, 211, 252, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 211, 252, 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 7. Solar — warm charcoal radial + amber haze */
+html[data-theme="solar"] body {
+  background-image: radial-gradient(
+    ellipse at 50% 40%,
+    var(--background) 0%,
+    var(--background-edge) 75%
+  );
+  background-attachment: fixed;
+}
+html[data-theme="solar"] body::before {
+  display: block;
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 15% 80%, rgba(249, 115, 22, 0.08) 0%, transparent 45%),
+    radial-gradient(circle at 85% 15%, rgba(251, 146, 60, 0.07) 0%, transparent 40%);
+  filter: blur(40px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 8. Matrix — terminal green scanlines */
+html[data-theme="matrix"] body {
+  background-color: var(--background);
+}
+html[data-theme="matrix"] body::before {
+  display: block;
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 255, 65, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 65, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+html[data-theme="matrix"] body::after {
+  display: block;
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 50% 100%, rgba(0, 255, 65, 0.06) 0%, transparent 55%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 9. Sunset — deep purple radial + orange horizon glow */
+html[data-theme="sunset"] body {
+  background-image: radial-gradient(
+    ellipse at 50% 35%,
+    var(--background-edge) 0%,
+    var(--background) 70%
+  );
+  background-attachment: fixed;
+}
+html[data-theme="sunset"] body::before {
+  display: block;
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 110%, rgba(249, 115, 22, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 10%, rgba(251, 146, 60, 0.06) 0%, transparent 40%);
+  filter: blur(40px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 10. Titanium — industrial metallic gradient */
+html[data-theme="titanium"] body {
+  background-image: linear-gradient(135deg, var(--background) 0%, var(--background-edge) 100%);
+  background-attachment: fixed;
+}
+html[data-theme="titanium"] body::before {
+  display: block;
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 50% 0%, rgba(226, 232, 240, 0.05) 0%, transparent 45%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ============================================================
+   Utilities
+   ============================================================ */
+
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: var(--surface2);
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--surface3);
+    border-radius: 3px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: var(--border);
+  }
+
+  .text-glow {
+    text-shadow: 0 0 20px var(--glow);
+  }
+}
+
+/* ============================================================
+   Components
+   ============================================================ */
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary hover:bg-primaryDark text-black px-4 py-2 rounded-lg transition-all duration-200 font-semibold;
+    box-shadow: 0 8px 20px var(--glow);
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 0 30px var(--glow), 0 8px 24px var(--glow);
+  }
+
+  .btn-secondary {
+    @apply bg-surface2 hover:bg-surface3 text-text px-4 py-2 rounded-lg transition-all duration-200 font-medium border border-border;
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 22px var(--glow);
+  }
+
+  .btn-outline {
+    @apply bg-transparent border border-border text-text px-4 py-2 rounded-lg transition-all duration-200 font-medium hover:bg-surface2;
+  }
+
+  .btn-outline:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px var(--glow);
+  }
+
+  .input-field {
+    @apply bg-surface2 border border-border text-text placeholder-textSecondary rounded-lg px-4 py-2 focus:outline-none focus:border-primary transition-colors duration-200;
+  }
+
+  .input-field:focus {
+    box-shadow: 0 0 16px var(--glow);
+  }
+
+  .card {
+    @apply bg-surface border border-border rounded-lg p-6 transition-all duration-300;
+  }
+
+  .card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 28px var(--glow);
+  }
+
+  .glass {
+    @apply bg-surface border border-border;
+  }
+
+  .glass-card {
+    @apply bg-surface border border-border rounded-xl transition-all duration-300;
+  }
+
+  .glass-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 26px var(--glow);
+  }
+
+  a {
+    @apply transition-colors duration-200;
+  }
+
+  a:hover {
+    color: var(--accent);
+    text-shadow: 0 0 14px var(--glow);
+  }
+
+  .hoverable:hover {
+    color: var(--accent);
+    text-shadow: 0 0 14px var(--glow);
+  }
+
+  button,
+  select,
+  input,
+  textarea {
+    @apply transition-colors duration-200;
+  }
+
+  [class*="hover:bg-surface"]:hover,
+  [class*="hover:border-"]:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 18px var(--glow);
+  }
+
+  .badge-gold {
+    @apply bg-primary text-black px-3 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .badge-outline {
+    @apply bg-transparent border border-border text-text px-3 py-1 rounded-full text-xs font-medium;
+  }
+
+  .badge-amber {
+    @apply bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] font-semibold;
+  }
+
+  .badge-violet {
+    @apply bg-violet-500/20 text-violet-400 border border-violet-500/30 px-2 py-0.5 rounded-full text-[10px] font-semibold;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-surface2 border border-border rounded-full text-sm text-text hover:bg-surface3 transition-all duration-200 cursor-pointer;
+  }
+
+  .chip:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 18px var(--glow);
+  }
+
+  .chip-active {
+    @apply bg-primary text-black border-primary;
+  }
+}
