@@ -6,11 +6,15 @@ import Link from "next/link"
 import Header from "@/components/layout/Header"
 import Sidebar from "@/components/layout/Sidebar"
 import {
-  runPsoGeneration,
   PSO_SLICES,
   SliceStatus,
   PsoResult,
 } from "@/lib/pso"
+import {
+  runGuardedGeneration,
+  watchdog,
+  pollApiHealth,
+} from "@/lib/guardian"
 import { GenerationMode, GeneratedFile, resolveProvider } from "@/lib/engine"
 import {
   Monitor,
@@ -33,6 +37,8 @@ import {
   Hammer,
   RotateCcw,
   GitBranch,
+  ShieldCheck,
+  Activity,
 } from "lucide-react"
 
 interface Platform {
@@ -159,6 +165,7 @@ function GeneratorInner() {
   const aiPreviewRef = useRef(false)
   const slicesRef = useRef<SliceStatus[]>([])
   const filesRef = useRef<GeneratedFile[]>([])
+  const [healthLevel, setHealthLevel] = useState<"ok" | "degraded" | "down">("ok")
 
   const updateSlices = (fn: (prev: SliceStatus[]) => SliceStatus[]) =>
     setSliceStatus((prev) => {
@@ -168,6 +175,17 @@ function GeneratorInner() {
     })
 
   useEffect(() => setMounted(true), [])
+
+  /* Watchdog 24/7 — subscreve o estado de saúde e sonda a API a cada 30s */
+  useEffect(() => {
+    const unsub = watchdog.subscribe(() => setHealthLevel(watchdog.overall()))
+    pollApiHealth()
+    const timer = setInterval(pollApiHealth, 30000)
+    return () => {
+      unsub()
+      clearInterval(timer)
+    }
+  }, [])
 
   const pushMsg = (role: ChatMessage["role"], text: string) =>
     setMessages((prev) => [...prev, { role, text, time: now() }])
@@ -221,12 +239,16 @@ function GeneratorInner() {
     pushMsg("user", userPrompt)
 
     try {
-      const res = await runPsoGeneration({
+      const res = await runGuardedGeneration({
         prompt: userPrompt,
         mode: currentMode,
         platforms: plats,
         onEvent: (e) => {
           pushLog(e.text)
+          if (e.type === "guardian") {
+            pushMsg("system", e.text)
+            return
+          }
           if (e.type === "sync") {
             pushMsg("system", `⎇ ${e.text}`)
             return
@@ -511,6 +533,32 @@ function GeneratorInner() {
                 </span>
               </div>
             ))}
+
+            {/* Rollstack Guardian — indicador de saúde 24/7 */}
+            <div
+              className={`ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                healthLevel === "ok"
+                  ? "border-success/40 bg-success/10 text-success"
+                  : healthLevel === "degraded"
+                  ? "border-warning/40 bg-warning/10 text-warning"
+                  : "border-error/40 bg-error/10 text-error"
+              }`}
+              title="Rollstack Guardian — monitorização contínua de filesystem, git, PSO e API"
+            >
+              {healthLevel === "ok" ? (
+                <ShieldCheck className="w-3.5 h-3.5" />
+              ) : (
+                <Activity className="w-3.5 h-3.5 animate-pulse" />
+              )}
+              <span>
+                Guardian:{" "}
+                {healthLevel === "ok"
+                  ? "Operacional"
+                  : healthLevel === "degraded"
+                  ? "A Corrigir"
+                  : "Falha"}
+              </span>
+            </div>
           </div>
 
           <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden">

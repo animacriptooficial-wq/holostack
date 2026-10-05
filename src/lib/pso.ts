@@ -56,6 +56,7 @@ export type PsoEventType =
   | "done"
   | "error"
   | "info"
+  | "guardian"
 
 export interface PsoEvent {
   type: PsoEventType
