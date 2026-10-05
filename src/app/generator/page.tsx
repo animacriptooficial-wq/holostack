@@ -39,6 +39,9 @@ import {
   GitBranch,
   ShieldCheck,
   Activity,
+  Download,
+  Rocket,
+  ExternalLink,
 } from "lucide-react"
 
 interface Platform {
@@ -159,6 +162,7 @@ function GeneratorInner() {
   const [activeFile, setActiveFile] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const autoStarted = useRef(false)
   const projectNameRef = useRef("holostack-app")
@@ -174,7 +178,89 @@ function GeneratorInner() {
       return next
     })
 
-  useEffect(() => setMounted(true), [])
+  /* ============ PERSISTÊNCIA DO STUDIO (re-hydration no F5) ============ */
+  const STUDIO_KEY = "holostack_studio"
+
+  useEffect(() => {
+    setMounted(true)
+    try {
+      const raw = localStorage.getItem(STUDIO_KEY)
+      if (!raw) return
+      const s = JSON.parse(raw) as {
+        projectName?: string
+        files?: GeneratedFile[]
+        previewHtml?: string
+        messages?: ChatMessage[]
+        buildLog?: string[]
+        sliceStatus?: SliceStatus[]
+        result?: PsoResult | null
+        mode?: GenerationMode
+      }
+      if (s.messages?.length) setMessages(s.messages)
+      if (s.buildLog?.length) setBuildLog(s.buildLog)
+      if (s.files?.length) {
+        setFiles(s.files)
+        filesRef.current = s.files
+        setActiveFile(s.files[0]?.path || null)
+      }
+      if (s.previewHtml) {
+        setPreviewHtml(s.previewHtml)
+        aiPreviewRef.current = true
+      }
+      if (s.sliceStatus?.length) updateSlices(() => s.sliceStatus!)
+      if (s.result) setResult(s.result)
+      if (s.mode) setMode(s.mode)
+      const projName = s.projectName || s.result?.projectName
+      if (projName) projectNameRef.current = projName
+
+      /* Re-hidratação do disco: os ficheiros físicos são a fonte de verdade */
+      if (projName) {
+        fetch(`/api/files?project=${encodeURIComponent(projName)}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            if (d?.files?.length) {
+              setFiles(d.files)
+              filesRef.current = d.files
+              setActiveFile((prev) => prev || d.files[0]?.path || null)
+              pushMsg(
+                "system",
+                `⛨ Workspace re-hidratado do disco — ${d.fileCount} ficheiros lidos de generated/${projName}`
+              )
+            }
+          })
+          .catch(() => {})
+      }
+    } catch {
+      /* estado corrompido — começa limpo */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /* Grava o estado do studio a cada mudança relevante */
+  useEffect(() => {
+    if (!mounted) return
+    if (!result && files.length === 0 && messages.length === 0) {
+      localStorage.removeItem(STUDIO_KEY)
+      return
+    }
+    try {
+      const payload = JSON.stringify({
+        projectName: projectNameRef.current,
+        files,
+        previewHtml,
+        messages,
+        buildLog,
+        sliceStatus,
+        result,
+        mode,
+      })
+      if (payload.length < 3_800_000) {
+        localStorage.setItem(STUDIO_KEY, payload)
+      }
+    } catch {
+      /* quota excedida — o disco continua a guardar os ficheiros */
+    }
+  }, [mounted, files, previewHtml, messages, buildLog, sliceStatus, result, mode])
 
   /* Watchdog 24/7 — subscreve o estado de saúde e sonda a API a cada 30s */
   useEffect(() => {
@@ -343,6 +429,47 @@ function GeneratorInner() {
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
+  /* Abre a aplicação gerada num separador real do browser */
+  const openLiveApp = () => {
+    if (!previewHtml) return
+    const blob = new Blob([previewHtml], { type: "text/html" })
+    window.open(URL.createObjectURL(blob), "_blank")
+  }
+
+  /* Download ZIP real de todos os ficheiros gerados */
+  const downloadZip = async () => {
+    if (files.length === 0 || downloading) return
+    setDownloading(true)
+    try {
+      const JSZip = (await import("jszip")).default
+      const zip = new JSZip()
+      const name = result?.projectName || projectNameRef.current
+      for (const f of files) zip.file(f.path, f.content)
+      const blob = await zip.generateAsync({ type: "blob" })
+      const a = document.createElement("a")
+      a.href = URL.createObjectURL(blob)
+      a.download = `${name}.zip`
+      a.click()
+      URL.revokeObjectURL(a.href)
+      pushMsg("system", `⬇ ${name}.zip descarregado — ${files.length} ficheiros empacotados`)
+    } catch (err) {
+      pushMsg("system", `✗ Falha no ZIP: ${err instanceof Error ? err.message : "erro"}`)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  /* Re-sincronização manual com o GitHub */
+  const resyncGitHub = async () => {
+    if (files.length === 0) return
+    pushMsg("system", "⎇ Re-sincronização manual com GitHub iniciada...")
+    const log = await syncSlice(projectNameRef.current, 4, files)
+    log.forEach((l) => pushMsg("system", `⎇ ${l}`))
+  }
+
+  const openDeployPanel = () =>
+    window.open("https://vercel.com/holostack/holostack", "_blank")
 
   const inStudio = result !== null || busy || messages.length > 0
   const selectedFile = files.find((f) => f.path === activeFile)
@@ -583,6 +710,9 @@ function GeneratorInner() {
                     setSliceStatus([])
                     setError(null)
                     setPrompt("")
+                    projectNameRef.current = "holostack-app"
+                    aiPreviewRef.current = false
+                    localStorage.removeItem(STUDIO_KEY)
                   }}
                   className="flex items-center gap-1.5 text-xs text-textSecondary hover:text-accent transition-colors"
                 >
@@ -691,6 +821,51 @@ function GeneratorInner() {
                   <Hammer className="w-3.5 h-3.5" />
                   Build & Sync
                 </button>
+
+                {/* Toolbar de ações — visível assim que existem ficheiros */}
+                {(files.length > 0 || previewHtml) && (
+                  <div className="ml-auto flex items-center gap-1">
+                    <button
+                      onClick={openLiveApp}
+                      disabled={!previewHtml}
+                      title="Abrir aplicação num separador real"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-textSecondary hover:text-accent hover:bg-surface2 transition-colors disabled:opacity-40"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Abrir App
+                    </button>
+                    <button
+                      onClick={downloadZip}
+                      disabled={files.length === 0 || downloading}
+                      title="Descarregar todos os ficheiros em ZIP"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-textSecondary hover:text-accent hover:bg-surface2 transition-colors disabled:opacity-40"
+                    >
+                      {downloading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Download className="w-3.5 h-3.5" />
+                      )}
+                      ZIP
+                    </button>
+                    <button
+                      onClick={resyncGitHub}
+                      disabled={files.length === 0}
+                      title="Re-sincronizar ficheiros com o GitHub"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-textSecondary hover:text-accent hover:bg-surface2 transition-colors disabled:opacity-40"
+                    >
+                      <GitBranch className="w-3.5 h-3.5" />
+                      Sync
+                    </button>
+                    <button
+                      onClick={openDeployPanel}
+                      title="Abrir painel de deploy (Vercel)"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-primary text-black hover:opacity-90 transition-opacity"
+                    >
+                      <Rocket className="w-3.5 h-3.5" />
+                      Deploy
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 overflow-hidden p-4">
