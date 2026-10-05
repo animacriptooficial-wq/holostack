@@ -104,20 +104,34 @@ export async function serverConfiguredProviders(): Promise<string[]> {
   }
 }
 
+/* Lista ORDENADA de candidatos: preferred → localStorage → .env servidor.
+   Permite failover automático quando uma chave está inválida (401). */
+export async function resolveAllProviders(
+  preferredId?: string
+): Promise<{ provider: ProviderConfig; key: string }[]> {
+  const keys = getStoredKeys()
+  const out: { provider: ProviderConfig; key: string }[] = []
+  const seen = new Set<string>()
+  const push = (id: string, key: string) => {
+    const p = PROVIDERS.find((x) => x.id === id)
+    if (p && !seen.has(id)) {
+      seen.add(id)
+      out.push({ provider: p, key })
+    }
+  }
+  if (preferredId && keys[preferredId]) push(preferredId, keys[preferredId])
+  for (const p of PROVIDERS) if (keys[p.id]) push(p.id, keys[p.id])
+  for (const id of await serverConfiguredProviders()) push(id, "")
+  return out
+}
+
 /* Resolve autenticação: localStorage primeiro, senão chave server-side.
    Devolve key="" quando a chave vive no servidor (proxy injeta-a). */
 export async function ensureProvider(
   preferredId?: string
 ): Promise<{ provider: ProviderConfig; key: string } | null> {
-  const local = resolveProvider(preferredId)
-  if (local) return local
-
-  const serverIds = await serverConfiguredProviders()
-  const pick =
-    (preferredId && serverIds.includes(preferredId) ? preferredId : null) || serverIds[0]
-  if (!pick) return null
-  const provider = PROVIDERS.find((p) => p.id === pick)
-  return provider ? { provider, key: "" } : null
+  const candidates = await resolveAllProviders(preferredId)
+  return candidates[0] || null
 }
 
 export function extractJson(raw: string): unknown {
@@ -283,43 +297,57 @@ export async function callModel(options: {
   providerId?: string
   maxTokens?: number
 }): Promise<ModelResponse> {
-  const resolved = await ensureProvider(options.providerId)
-  if (!resolved) {
+  const candidates = await resolveAllProviders(options.providerId)
+  if (candidates.length === 0) {
     throw new Error(
       "NO_KEY:Nenhuma chave de API configurada. Vá a /settings ou configure .env no servidor."
     )
   }
-  const { provider, key } = resolved
   const maxTokens = options.maxTokens ?? 16000
 
-  /* Chamada via proxy server-side /api/generate — elimina CORS
-     e garante headers de autenticação construídos no servidor */
-  let res: Response
-  try {
-    res = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        providerId: provider.id,
-        key,
-        systemPrompt: options.systemPrompt,
-        userPrompt: options.userPrompt,
-        maxTokens,
-      }),
-    })
-  } catch (err) {
-    throw new Error(
-      `Falha de rede ao contactar o motor (${provider.name}): ${err instanceof Error ? err.message : "erro"}`
-    )
-  }
+  /* FAILOVER: se um provider dá 401/403 (chave inválida), passa
+     automaticamente para o próximo candidato em vez de abortar */
+  let lastAuthError: Error | null = null
+  let lastError: Error | null = null
 
-  const data = await res.json().catch(() => ({ ok: false, error: `resposta inválida (${res.status})` }))
-
-  if (!res.ok || !data.ok) {
-    if (res.status === 401 || res.status === 403) {
-      throw authError(provider.name, res.status)
+  for (const { provider, key } of candidates) {
+    let res: Response
+    try {
+      res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          providerId: provider.id,
+          key,
+          systemPrompt: options.systemPrompt,
+          userPrompt: options.userPrompt,
+          maxTokens,
+        }),
+      })
+    } catch (err) {
+      lastError = new Error(
+        `Falha de rede ao contactar ${provider.name}: ${err instanceof Error ? err.message : "erro"}`
+      )
+      continue
     }
-    throw new Error((data.error as string) || `${provider.name} falhou (${res.status})`)
+
+    const data = await res
+      .json()
+      .catch(() => ({ ok: false, error: `resposta inválida (${res.status})` }))
+
+    if (res.ok && data.ok) {
+      return { text: data.text as string, provider: provider.name, model: data.model || provider.model }
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      lastAuthError = authError(provider.name, res.status)
+      continue /* tenta o próximo provider */
+    }
+
+    lastError = new Error((data.error as string) || `${provider.name} falhou (${res.status})`)
+    /* erro não-auth: não vale a pena tentar outros providers com o mesmo pedido */
+    break
   }
-  return { text: data.text as string, provider: provider.name, model: data.model || provider.model }
+
+  throw lastAuthError || lastError || new Error("Todos os providers falharam")
 }

@@ -1,0 +1,1 @@
+{"ok":true,"text":"{\n  \"files\": [\n    {\n      \"path\": \"src/hello.ts\",\n      \"content\": \"function sayHello(): void {\\n  console.log('Hello, World!');\\n}\\n\\nsayHello();\"\n    }\n  ]\n}","provider":"openai","model":"gpt-4o"}
