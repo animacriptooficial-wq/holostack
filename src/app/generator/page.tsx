@@ -72,6 +72,67 @@ function now() {
   return new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })
 }
 
+/* Preview progressivo — o site/app "a nascer" em tempo real durante as fatias 1–2 */
+function buildProgressPreview(
+  files: GeneratedFile[],
+  slices: SliceStatus[],
+  mode: GenerationMode
+): string {
+  const done = slices.filter((s) => s.status === "verified").length
+  const healing = slices.some((s) => s.status === "healing")
+  const pct = Math.round((done / 4) * 100)
+  const fileRows = files
+    .slice(-14)
+    .map(
+      (f) =>
+        `<div class="file"><span class="check">✓</span><span class="path">${f.path}</span><span class="size">${(
+          f.content.length / 1024
+        ).toFixed(1)}KB</span></div>`
+    )
+    .join("")
+  const sliceRows = slices
+    .map((s) => {
+      const color =
+        s.status === "verified" ? "#10b981" : s.status === "running" ? "#fbbf24" : s.status === "healing" ? "#f59e0b" : "#3f3f46"
+      const label =
+        s.status === "verified" ? "VERIFICADA" : s.status === "healing" ? "AUTOCORREÇÃO" : s.status === "running" ? "A GERAR" : "PENDENTE"
+      return `<div class="slice"><span class="dot" style="background:${color}"></span><span class="sname">${s.id}. ${s.name}</span><span class="sstatus" style="color:${color}">${label}</span></div>`
+    })
+    .join("")
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#030305;color:#f4f4f5;font-family:'Segoe UI',system-ui,monospace;height:100vh;overflow:hidden;position:relative}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(circle at 20% 20%,rgba(251,191,36,.07),transparent 45%),radial-gradient(circle at 80% 80%,rgba(245,158,11,.06),transparent 45%);filter:blur(30px)}
+.wrap{position:relative;padding:28px;height:100%;display:flex;flex-direction:column;gap:18px}
+h1{font-size:15px;letter-spacing:2px;color:#fbbf24}
+.sub{font-size:11px;color:#a1a1aa}
+.bar{height:8px;background:#161617;border-radius:4px;overflow:hidden;border:1px solid rgba(251,191,36,.2)}
+.fill{height:100%;width:${pct}%;background:linear-gradient(90deg,#f59e0b,#fbbf24);transition:width .8s ease;box-shadow:0 0 14px rgba(251,191,36,.5)}
+.pct{font-size:24px;font-weight:700;color:#fbbf24}
+.slices{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.slice{display:flex;align-items:center;gap:8px;background:#000;border:1px solid rgba(251,191,36,.15);border-radius:8px;padding:8px 10px}
+.dot{width:8px;height:8px;border-radius:50%;animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.sname{flex:1;font-size:10px;color:#e4e4e7}
+.sstatus{font-size:9px;font-weight:700;letter-spacing:.5px}
+.files{flex:1;overflow:hidden;background:#000;border:1px solid rgba(251,191,36,.15);border-radius:10px;padding:12px}
+.ftitle{font-size:10px;color:#a1a1aa;letter-spacing:1px;margin-bottom:8px;text-transform:uppercase}
+.file{display:flex;gap:8px;padding:3px 0;font-size:11px;animation:fadein .5s ease}
+@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.check{color:#10b981}.path{flex:1;color:#d4d4d8}.size{color:#71717a;font-size:10px}
+.mode{position:absolute;top:26px;right:28px;font-size:9px;padding:4px 10px;border:1px solid rgba(251,191,36,.3);border-radius:12px;color:#fbbf24;letter-spacing:1px}
+${healing ? ".heal{color:#f59e0b;font-size:10px;animation:pulse 1s infinite}" : ""}
+</style></head><body><div class="wrap">
+<div class="mode">${mode === "site" ? "SITE / WEB APP" : "PROGRAMA MULTIPLATAFORMA"}</div>
+<div><h1>HOLOSTACK PSO ENGINE</h1><div class="sub">Construção atómica em tempo real — fatia a fatia verificada</div></div>
+<div class="pct">${pct}%</div>
+<div class="bar"><div class="fill"></div></div>
+${healing ? '<div class="heal">⛨ Loop de autocorreção ativo — a reescrever e a retestar código</div>' : ""}
+<div class="slices">${sliceRows}</div>
+<div class="files"><div class="ftitle">Ficheiros verificados (${files.length})</div>${fileRows || '<div class="sub">A aguardar primeira fatia...</div>'}</div>
+</div></body></html>`
+}
+
 function GeneratorInner() {
   const searchParams = useSearchParams()
   const [mode, setMode] = useState<GenerationMode>(
@@ -95,6 +156,16 @@ function GeneratorInner() {
   const chatEndRef = useRef<HTMLDivElement>(null)
   const autoStarted = useRef(false)
   const projectNameRef = useRef("holostack-app")
+  const aiPreviewRef = useRef(false)
+  const slicesRef = useRef<SliceStatus[]>([])
+  const filesRef = useRef<GeneratedFile[]>([])
+
+  const updateSlices = (fn: (prev: SliceStatus[]) => SliceStatus[]) =>
+    setSliceStatus((prev) => {
+      const next = fn(prev)
+      slicesRef.current = next
+      return next
+    })
 
   useEffect(() => setMounted(true), [])
 
@@ -136,7 +207,8 @@ function GeneratorInner() {
     setFiles([])
     setPreviewHtml("")
     setResult(null)
-    setSliceStatus(
+    aiPreviewRef.current = false
+    updateSlices(() =>
       PSO_SLICES.map((s) => ({
         id: s.id,
         name: s.name,
@@ -160,17 +232,22 @@ function GeneratorInner() {
             return
           }
           if (e.type === "preview") {
+            aiPreviewRef.current = true
             setPreviewHtml(e.previewHtml || "")
             return
           }
           if (e.type === "files") {
             setFiles(e.files || [])
+            filesRef.current = e.files || []
             setActiveFile(e.files?.[0]?.path || null)
+            if (!aiPreviewRef.current) {
+              setPreviewHtml(buildProgressPreview(e.files || [], slicesRef.current, currentMode))
+            }
             return
           }
           pushMsg(e.type === "info" ? "system" : "agent", e.text)
           if (e.sliceId) {
-            setSliceStatus((prev) =>
+            updateSlices((prev) =>
               prev.map((s) => {
                 if (s.id !== e.sliceId) return s
                 if (e.type === "slice-start") return { ...s, status: "running" }
@@ -180,6 +257,9 @@ function GeneratorInner() {
                 return s
               })
             )
+            if (!aiPreviewRef.current) {
+              setPreviewHtml(buildProgressPreview(filesRef.current, slicesRef.current, currentMode))
+            }
           }
         },
         onSliceSync: (sliceId, allFiles) => syncSlice(projectNameRef.current, sliceId, allFiles),
@@ -573,8 +653,10 @@ function GeneratorInner() {
                       </div>
                       <span className="text-xs text-textSecondary font-mono ml-2 truncate">
                         {previewHtml
-                          ? `${result?.projectName || "projeto"} — aplicação em execução`
-                          : "a aguardar fatia 3 (interface)"}
+                          ? result?.projectName
+                            ? `${result.projectName} — aplicação em execução`
+                            : "construção em tempo real — fatia a fatia"
+                          : "a aguardar primeira fatia"}
                       </span>
                     </div>
                     {previewHtml ? (

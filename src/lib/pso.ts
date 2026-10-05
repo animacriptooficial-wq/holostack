@@ -134,6 +134,19 @@ export function validateFile(file: GeneratedFile): string[] {
     if (importLines) {
       errors.push(`${file.path}: import sem origem (from '...') — ${importLines[0].trim().slice(0, 60)}`)
     }
+
+    /* Deteção de truncamento — última linha útil termina a meio de uma expressão */
+    const lines = file.content.split("\n")
+    let last = ""
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (lines[i].trim()) {
+        last = lines[i].trim()
+        break
+      }
+    }
+    if (/(?:[,=([{<]|=>|\\|\bimport|\bfrom|\bexport|\bconst|\blet|\breturn)\s*$/i.test(last)) {
+      errors.push(`${file.path}: ficheiro parece truncado — termina em "${last.slice(-30)}"`)
+    }
   }
 
   return errors
