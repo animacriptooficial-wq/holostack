@@ -92,6 +92,34 @@ export function resolveProvider(
   return null
 }
 
+/* Providers com chave no .env do servidor (via /api/generate GET) */
+export async function serverConfiguredProviders(): Promise<string[]> {
+  try {
+    const res = await fetch("/api/generate", { cache: "no-store" })
+    if (!res.ok) return []
+    const data = await res.json()
+    return Array.isArray(data.providers) ? data.providers : []
+  } catch {
+    return []
+  }
+}
+
+/* Resolve autenticação: localStorage primeiro, senão chave server-side.
+   Devolve key="" quando a chave vive no servidor (proxy injeta-a). */
+export async function ensureProvider(
+  preferredId?: string
+): Promise<{ provider: ProviderConfig; key: string } | null> {
+  const local = resolveProvider(preferredId)
+  if (local) return local
+
+  const serverIds = await serverConfiguredProviders()
+  const pick =
+    (preferredId && serverIds.includes(preferredId) ? preferredId : null) || serverIds[0]
+  if (!pick) return null
+  const provider = PROVIDERS.find((p) => p.id === pick)
+  return provider ? { provider, key: "" } : null
+}
+
 export function extractJson(raw: string): unknown {
   let text = raw.trim()
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/)
@@ -255,10 +283,10 @@ export async function callModel(options: {
   providerId?: string
   maxTokens?: number
 }): Promise<ModelResponse> {
-  const resolved = resolveProvider(options.providerId)
+  const resolved = await ensureProvider(options.providerId)
   if (!resolved) {
     throw new Error(
-      "NO_KEY:Nenhuma chave de API configurada. Vá a /settings e adicione a chave do GPT-5.6 Luna ou de outro motor."
+      "NO_KEY:Nenhuma chave de API configurada. Vá a /settings ou configure .env no servidor."
     )
   }
   const { provider, key } = resolved

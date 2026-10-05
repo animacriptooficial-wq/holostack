@@ -20,27 +20,46 @@ interface GenerateRequest {
   endpoint?: string
 }
 
-const PROVIDER_ENDPOINTS: Record<string, { endpoint: string; model: string; kind: string }> = {
+const PROVIDER_ENDPOINTS: Record<string, { endpoint: string; model: string; kind: string; envKey: string }> = {
   luna: {
     kind: "openai",
     endpoint: "https://openrouter.ai/api/v1/chat/completions",
     model: "openai/gpt-4o",
+    envKey: "OPENROUTER_API_KEY",
   },
   openai: {
     kind: "openai",
     endpoint: "https://api.openai.com/v1/chat/completions",
     model: "gpt-4o",
+    envKey: "OPENAI_API_KEY",
   },
   anthropic: {
     kind: "anthropic",
     endpoint: "https://api.anthropic.com/v1/messages",
     model: "claude-3-5-sonnet-20241022",
+    envKey: "ANTHROPIC_API_KEY",
   },
   google: {
     kind: "google",
     endpoint: "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent",
     model: "gemini-1.5-pro",
+    envKey: "GOOGLE_API_KEY",
   },
+}
+
+/* Chaves de ambiente do servidor (.env) — fallback quando o
+   cliente não envia chave. Nunca expostas no bundle do browser. */
+function envKeyFor(providerId: string): string {
+  return (process.env[PROVIDER_ENDPOINTS[providerId]?.envKey || ""] || "").trim()
+}
+
+function envConfiguredProviders(): string[] {
+  return Object.keys(PROVIDER_ENDPOINTS).filter((id) => envKeyFor(id).length > 0)
+}
+
+/* GET — pré-voo: quais providers têm chave server-side disponível */
+export async function GET() {
+  return NextResponse.json({ providers: envConfiguredProviders() })
 }
 
 async function callOpenAICompatible(
@@ -79,11 +98,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Pedido inválido" }, { status: 400 })
   }
 
-  const providerId = body.providerId || ""
-  const key = (body.key || "").trim()
-  const systemPrompt = body.systemPrompt || ""
-  const userPrompt = body.userPrompt || ""
-  const maxTokens = Math.min(body.maxTokens || 16000, 32000)
+  /* Provider: usa o pedido, senão escolhe o primeiro com chave env */
+  let providerId = body.providerId || ""
+  if (!PROVIDER_ENDPOINTS[providerId]) {
+    providerId = envConfiguredProviders()[0] || ""
+  }
 
   const spec = PROVIDER_ENDPOINTS[providerId]
   if (!spec) {
@@ -92,9 +111,16 @@ export async function POST(req: Request) {
       { status: 400 }
     )
   }
+
+  /* Chave: cliente (localStorage) → fallback .env do servidor */
+  const key = (body.key || "").trim() || envKeyFor(providerId)
+  const systemPrompt = body.systemPrompt || ""
+  const userPrompt = body.userPrompt || ""
+  const maxTokens = Math.min(body.maxTokens || 16000, 32000)
+
   if (!key) {
     return NextResponse.json(
-      { ok: false, status: 401, error: "Chave de API em falta — configure em /settings" },
+      { ok: false, status: 401, error: "Chave de API em falta — configure em /settings ou .env" },
       { status: 401 }
     )
   }

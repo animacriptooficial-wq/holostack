@@ -1,6 +1,6 @@
 "use client"
 
-import { callModel, parseModelOutput, resolveProvider, GeneratedFile, GenerationMode } from "./engine"
+import { callModel, parseModelOutput, ensureProvider, GeneratedFile, GenerationMode } from "./engine"
 
 /* ============================================================
    PSO — Prompt Slicing & Optimization
@@ -268,16 +268,20 @@ export async function runPsoGeneration(options: {
   let providerUsed = ""
   let modelUsed = ""
 
-  /* PRÉ-VOO: bloqueia o arranque se não existir chave válida —
-     nenhuma fatia corre sem autenticação garantida */
-  const preflight = resolveProvider(providerId)
+  /* PRÉ-VOO: bloqueia o arranque se não existir chave válida
+     (localStorage ou .env do servidor) — nenhuma fatia corre
+     sem autenticação garantida */
+  const preflight = await ensureProvider(providerId)
   if (!preflight) {
     emit("error", "Nenhuma chave de API configurada — configure em /settings antes de gerar")
     throw new Error(
-      "NO_KEY:Nenhuma chave de API configurada. Vá a /settings e adicione a chave do GPT-5.6 Luna ou de outro motor."
+      "NO_KEY:Nenhuma chave de API configurada. Vá a /settings ou configure .env no servidor."
     )
   }
-  emit("info", `Motor PSO ativado — ${preflight.provider.name} (${preflight.provider.model}) autenticado · pedido fatiado em 4 micro-tarefas`)
+  emit(
+    "info",
+    `Motor PSO ativado — ${preflight.provider.name} (${preflight.provider.model}) autenticado${preflight.key ? " (chave local)" : " (chave servidor .env)"} · pedido fatiado em 4 micro-tarefas`
+  )
 
   for (const slice of PSO_SLICES) {
     const status = slices[slice.id - 1]
