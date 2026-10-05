@@ -1,5 +1,5 @@
 {
-  "name": "car-site",
+  "name": "luxury-cars-site",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -8,13 +8,11 @@
     "start": "vite preview"
   },
   "dependencies": {
-    "react": "^18.0.0",
-    "zustand": "^4.0.0",
-    "lucide-react": "^0.2.0"
-  },
-  "devDependencies": {
+    "react": "^18.2.0",
     "typescript": "^5.0.0",
-    "tailwindcss": "^3.0.0",
-    "vite": "^4.0.0"
+    "tailwindcss": "^3.2.0",
+    "vite": "^4.0.0",
+    "zustand": "^4.1.0",
+    "lucide-react": "^0.2.0"
   }
 }
