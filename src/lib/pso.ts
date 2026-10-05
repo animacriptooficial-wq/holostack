@@ -1,6 +1,6 @@
 "use client"
 
-import { callModel, extractJson, GeneratedFile, GenerationMode } from "./engine"
+import { callModel, parseModelOutput, GeneratedFile, GenerationMode } from "./engine"
 
 /* ============================================================
    PSO — Prompt Slicing & Optimization
@@ -232,7 +232,10 @@ function healPrompt(baseUser: string, errors: string[]): string {
 AUTOCORREÇÃO: A fatia anterior falhou na validação estática. Erros exatos:
 ${errors.map((e) => `- ${e}`).join("\n")}
 
-Corrige TODOS os erros e devolve a fatia completa novamente em JSON válido. Não omitas conteúdo.`
+Corrige TODOS os erros e devolve a fatia completa. FORMATO OBRIGATÓRIO (um de):
+1. JSON válido: { "files": [{ "path": "src/x.ts", "content": "..." }] }
+2. Ou blocos markdown com caminho declarado: src/App.tsx seguido de \`\`\`tsx ... \`\`\`
+Nunca omitas conteúdo, nunca devolvas texto solto sem ficheiros.`
 }
 
 /* ---------------- Orquestrador PSO ---------------- */
@@ -291,21 +294,29 @@ export async function runPsoGeneration(options: {
         providerUsed = res.provider
         modelUsed = res.model
 
-        const parsed = extractJson(res.text) as {
-          files?: GeneratedFile[]
-          previewHtml?: string
-          plan?: string
-          projectName?: string
-        }
+        const parsed = parseModelOutput(res.text)
 
-        sliceFiles = Array.isArray(parsed.files) ? parsed.files : []
+        sliceFiles = parsed.files
         sliceErrors = sliceFiles.flatMap(validateFile)
 
         if ((slice.id === 3 || slice.id === 4) && parsed.previewHtml) {
           sliceErrors = [...sliceErrors, ...validatePreviewHtml(parsed.previewHtml)]
         }
         if (sliceFiles.length === 0) {
-          sliceErrors.push("A fatia não devolveu nenhum ficheiro")
+          sliceErrors.push("Erro: A IA não gerou blocos de código válidos")
+          if (attempt < MAX_ATTEMPTS) {
+            emit(
+              "info",
+              `Parse falhou (modo: ${parsed.parseMode}) — início da resposta bruta do modelo: ${parsed.rawSnippet.slice(0, 300).replace(/\s+/g, " ")}`,
+              { sliceId: slice.id }
+            )
+          }
+        } else {
+          emit(
+            "info",
+            `Fatia ${slice.id}: ${sliceFiles.length} ficheiro(s) extraídos (parser: ${parsed.parseMode})`,
+            { sliceId: slice.id }
+          )
         }
 
         if (sliceErrors.length > 0 && attempt < MAX_ATTEMPTS) {
@@ -370,12 +381,17 @@ export async function runPsoGeneration(options: {
       emit("preview", "Live preview atualizado", { sliceId: slice.id, previewHtml })
     }
 
-    if (onSliceSync) {
+    /* Bloqueio de segurança: nunca escrever/commits com 0 ficheiros */
+    if (onSliceSync && allFiles.length > 0) {
       emit("sync", `Fatia ${slice.id}: a escrever ficheiros e sincronizar com GitHub...`, {
         sliceId: slice.id,
       })
       const log = await onSliceSync(slice.id, allFiles)
       log.forEach((line) => emit("sync", line, { sliceId: slice.id }))
+    } else if (onSliceSync && allFiles.length === 0) {
+      emit("sync", `Fatia ${slice.id}: sync bloqueado — 0 ficheiros extraídos, nada a gravar`, {
+        sliceId: slice.id,
+      })
     }
   }
 
