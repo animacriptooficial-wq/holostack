@@ -1,4 +1,4 @@
-﻿name: Deploy Cloudflare Workers
+name: Deploy Cloudflare Workers
 
 on:
   push:
@@ -38,16 +38,18 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.SYNC_GITHUB_TOKEN }}
+          SYNC_GITHUB_TOKEN: ${{ secrets.SYNC_GITHUB_TOKEN }}
           GH_REPO: ${{ secrets.GH_REPO }}
           GH_BRANCH: ${{ secrets.GH_BRANCH }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          for name in OPENAI_API_KEY GITHUB_TOKEN GH_REPO GH_BRANCH SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY SUPABASE_ANON_KEY; do
-            value="${!name}"
-            if [ -n "$value" ]; then
-              wname="$name"; [ "$name" = "GH_REPO" ] && wname="GITHUB_REPO"; [ "$name" = "GH_BRANCH" ] && wname="GITHUB_BRANCH";`n              echo "$value" | npx --yes wrangler@4 secret put "$wname" --name holostack
-            fi
-          done
+          push_secret() { echo "$2" | npx --yes wrangler@4 secret put "$1" --name holostack; }
+          [ -n "$OPENAI_API_KEY" ] && push_secret OPENAI_API_KEY "$OPENAI_API_KEY"
+          [ -n "$SYNC_GITHUB_TOKEN" ] && push_secret GITHUB_TOKEN "$SYNC_GITHUB_TOKEN"
+          [ -n "$GH_REPO" ] && push_secret GITHUB_REPO "$GH_REPO"
+          [ -n "$GH_BRANCH" ] && push_secret GITHUB_BRANCH "$GH_BRANCH"
+          [ -n "$SUPABASE_URL" ] && push_secret SUPABASE_URL "$SUPABASE_URL"
+          [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] && push_secret SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY"
+          [ -n "$SUPABASE_ANON_KEY" ] && push_secret SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
