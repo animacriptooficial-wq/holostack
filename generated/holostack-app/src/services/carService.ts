@@ -1,15 +1,26 @@
 import { Car } from '../types';
 
-export const fetchLuxuryCars = async (): Promise<Car[]> => {
-  // This would be replaced with an actual API call
+export const fetchCars = async (): Promise<Car[]> => {
+  // Simulate fetching data from an API
   return [
-    { id: '1', brand: 'Ferrari', model: '488 GTB', year: 2020, price: 250000 },
-    { id: '2', brand: 'Lamborghini', model: 'Huracan', year: 2021, price: 300000 },
-    { id: '3', brand: 'Porsche', model: '911 Turbo S', year: 2021, price: 200000 }
+    {
+      id: 1,
+      name: 'Luxury Sedan',
+      brand: 'Brand A',
+      price: 75000,
+      image: '/images/luxury-sedan.jpg',
+    },
+    {
+      id: 2,
+      name: 'Luxury SUV',
+      brand: 'Brand B',
+      price: 95000,
+      image: '/images/luxury-suv.jpg',
+    },
   ];
 };
 
-export const fetchCarById = async (id: string): Promise<Car | undefined> => {
-  const cars = await fetchLuxuryCars();
-  return cars.find(car => car.id === id);
+export const fetchCarById = async (id: number): Promise<Car | undefined> => {
+  const cars = await fetchCars();
+  return cars.find((car) => car.id === id);
 };

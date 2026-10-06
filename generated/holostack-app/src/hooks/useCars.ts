@@ -7,16 +7,11 @@ export const useCars = () => {
 
   useEffect(() => {
     const loadCars = async () => {
-      try {
-        const carsData = await fetchCars();
-        carsData.forEach(addCar);
-      } catch (error) {
-        console.error('Failed to load cars:', error);
-      }
+      const carsData = await fetchCars();
+      carsData.forEach((car) => addCar(car));
     };
-
     loadCars();
   }, [addCar]);
 
-  return cars;
+  return { cars };
 };
