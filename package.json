@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "esbuild": "^0.25.9",
     "jszip": "^3.10.1",
     "lucide-react": "^0.400.0",
     "next": "^15.5.27",

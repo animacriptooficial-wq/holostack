@@ -267,6 +267,26 @@ Nunca omitas conteúdo, nunca devolvas texto solto sem ficheiros.`
    uma chamada extra converte o código-fonte gerado num documento
    HTML 100% inline — com orçamento de tokens exclusivo para a UI. */
 
+/* Bundling real no servidor: esbuild compila o código-fonte gerado
+   e devolve um documento self-contained (importmap → esm.sh).
+   Determinístico — não depende de IA nem de chaves de API. */
+export async function bundleRuntimePreview(
+  allFiles: GeneratedFile[]
+): Promise<string> {
+  try {
+    const res = await fetch("/api/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files: allFiles }),
+    })
+    const data = await res.json().catch(() => null)
+    if (res.ok && data?.ok && typeof data.html === "string") return data.html
+    return ""
+  } catch {
+    return ""
+  }
+}
+
 export async function compilePreviewFromSource(
   allFiles: GeneratedFile[],
   mode: GenerationMode,
@@ -490,27 +510,35 @@ export async function runPsoGeneration(options: {
   if (previewErrors.length > 0 && allFiles.length > 0) {
     emit(
       "info",
-      `Preview ${previewHtml ? "inválido" : "ausente"} (${previewErrors[0].slice(0, 60)}) — compilador dedicado ativado`
+      `Preview ${previewHtml ? "inválido" : "ausente"} (${previewErrors[0].slice(0, 60)}) — a bundlar o código real`
     )
-    try {
-      const compiled = await compilePreviewFromSource(allFiles, mode, providerId, emit)
-      const errs = compiled ? validatePreviewHtml(compiled) : ["vazio"]
-      if (compiled && errs.length === 0) {
-        previewHtml = compiled
-        emit("preview", "Preview compilado — aplicação renderizável no iframe", { previewHtml })
-      } else {
+    /* 1) Bundling determinístico do código-fonte (esbuild + importmap) */
+    const bundled = await bundleRuntimePreview(allFiles)
+    if (bundled && validatePreviewHtml(bundled).length === 0) {
+      previewHtml = bundled
+      emit("preview", "Preview real compilado — o teu código executa no iframe", { previewHtml })
+    } else {
+      /* 2) Fallback: compilador de preview via IA */
+      try {
+        const compiled = await compilePreviewFromSource(allFiles, mode, providerId, emit)
+        const errs = compiled ? validatePreviewHtml(compiled) : ["vazio"]
+        if (compiled && errs.length === 0) {
+          previewHtml = compiled
+          emit("preview", "Preview compilado — aplicação renderizável no iframe", { previewHtml })
+        } else {
+          emit(
+            "slice-warning",
+            `Compilador de preview: resultado falhou validação (${errs[0]?.slice(0, 80)})`,
+            {}
+          )
+        }
+      } catch (err) {
         emit(
           "slice-warning",
-          `Compilador de preview: resultado falhou validação (${errs[0]?.slice(0, 80)})`,
+          `Compilador de preview falhou: ${err instanceof Error ? err.message : "erro"}`,
           {}
         )
       }
-    } catch (err) {
-      emit(
-        "slice-warning",
-        `Compilador de preview falhou: ${err instanceof Error ? err.message : "erro"}`,
-        {}
-      )
     }
   }
 

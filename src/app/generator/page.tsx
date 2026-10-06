@@ -11,6 +11,7 @@ import {
   PsoResult,
   validatePreviewHtml,
   compilePreviewFromSource,
+  bundleRuntimePreview,
 } from "@/lib/pso"
 import {
   runGuardedGeneration,
@@ -236,13 +237,17 @@ function GeneratorInner() {
             const restoredPreview = s.previewHtml || ""
             const filesForPreview = d?.files?.length ? d.files : s.files || []
             if (validatePreviewHtml(restoredPreview).length > 0 && filesForPreview.length > 0) {
-              pushMsg("system", "⛨ Preview anterior inválido — compilador dedicado a reconstruir...")
-              compilePreviewFromSource(filesForPreview, s.mode || "site", undefined, () => {})
+              pushMsg("system", "⛨ Preview anterior inválido — a bundlar o código real...")
+              bundleRuntimePreview(filesForPreview)
+                .then(async (html) => {
+                  if (html && validatePreviewHtml(html).length === 0) return html
+                  return compilePreviewFromSource(filesForPreview, s.mode || "site", undefined, () => {})
+                })
                 .then((html) => {
                   if (html && validatePreviewHtml(html).length === 0) {
                     aiPreviewRef.current = true
                     setPreviewHtml(html)
-                    pushMsg("system", "✓ Preview recompilado — aplicação renderizável no iframe")
+                    pushMsg("system", "✓ Preview compilado — aplicação renderizável no iframe")
                   }
                 })
                 .catch(() => {})
