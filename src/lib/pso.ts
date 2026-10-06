@@ -199,6 +199,24 @@ export function validatePreviewHtml(html: string): string[] {
 
 /* ---------------- Prompts por fatia ---------------- */
 
+/* ============ NÚCLEO DE EXECUÇÃO MECÂNICO E DETERMINÍSTICO ============
+   Leis imutáveis do motor — injetadas em TODAS as chamadas ao modelo. */
+const DETERMINISTIC_CORE = `És um motor computacional de engenharia de software estritamente determinístico — sem criatividade autónoma nem interpretação subjetiva. A tua função é traduzir parâmetros de entrada em código funcional com precisão literal.
+
+LEI 1 — ESCOPO RESTRITO: geras APENAS (a) aplicativos mobile/desktop, (b) programas de execução lógica, (c) websites institucionais/comerciais, (d) web apps. Qualquer pedido fora deste escopo → responde SÓ com { "error": "FORA DE ESCOPO" }.
+
+LEI 2 — OBEDIÊNCIA LITERAL: a entrada gera saída exata e literal. PROIBIDO alterar cores, valores, textos, estruturas, layouts ou lógicas pedidas sob pretexto de "melhoria" ou "modernidade". Se o utilizador definiu X ou a cor Y, a saída é estritamente X e Y.
+
+LEI 3 — TABELA DE CORES: toda cor usa códigos hexadecimais exatos (#000000, #FFFFFF, etc.) — proibidos nomes arbitrários ou tons inventados/aproximados.
+
+LEI 4 — ZERO ALUCINAÇÕES/PLACEHOLDERS: nunca inventes funcionalidades, bibliotecas ou dados não pedidos. Proibido "// inserir código aqui", TODO, FIXME, "Item 1", "Model 1", "Details about", "Lorem ipsum". Todo o código é 100% completo e syntax-ready.
+
+LEI 5 — TRAVA DE CORREÇÃO: perante erro de compilação/validação, corrige EXCLUSIVAMENTE a falha reportada. PROIBIDO alterar design, cores, textos ou arquitetura como "ajuste".
+
+LEI 6 — SAÍDA LIMPA: zero texto amigável, justificativas ou opiniões. Só código e estrutura técnica.
+
+`
+
 const JSON_CONTRACT = `Respond ONLY with a single valid JSON object — no markdown, no commentary.
 Shape: { "files": [{ "path": "relative/path.ext", "content": "COMPLETE file content" }] }
 Never truncate file content. Never write TODO, FIXME or placeholder comments.
@@ -215,24 +233,27 @@ function slicePrompt(
     ? `\nFicheiros já gerados em fatias anteriores (não repetir): ${existingPaths.join(", ")}`
     : ""
   const kind = mode === "site" ? "um SITE / WEB APP (Next.js)" : `um PROGRAMA multiplataforma para ${platforms.join(", ")}`
+  let body: string
 
   switch (slice.id) {
     case 1:
-      return `${JSON_CONTRACT}
+      body = `${JSON_CONTRACT}
 Estás a construir ${kind}. Gera APENAS a Fatia 1 — ARQUITETURA & DADOS:
 - package.json completo (deps: react, typescript, tailwindcss, vite, zustand, lucide-react${mode === "program" ? ", @tauri-apps/api, @capacitor/core" : ""})
 - tsconfig.json, tipos e esquemas TypeScript (src/types.ts)
 - estrutura de rotas/base (src/config.ts ou app structure)
 ${ctx}`
+      break
     case 2:
-      return `${JSON_CONTRACT}
+      body = `${JSON_CONTRACT}
 Continuação — ${kind}. Gera APENAS a Fatia 2 — CORE LOGIC & ESTADO:
 - Zustand store(s) completos (src/store.ts)
 - lógica de negócio, serviços e hooks (src/services/, src/hooks/)
 - toda a regra funcional do pedido do utilizador
 ${ctx}`
+      break
     case 3:
-      return `Respond ONLY with a single valid JSON object — no markdown.
+      body = `Respond ONLY with a single valid JSON object — no markdown.
 Shape: { "files": [{ "path": "...", "content": "COMPLETE file content" }], "previewHtml": "COMPLETE standalone HTML5 doc" }
 Continuação — ${kind}. Gera APENAS a Fatia 3 — INTERFACE & DESIGN:
 - Componentes visuais completos (src/components/, src/App.tsx, estilos)
@@ -241,8 +262,9 @@ Continuação — ${kind}. Gera APENAS a Fatia 3 — INTERFACE & DESIGN:
 - A app tem de mostrar conteúdo visível real: HTML direto ou JS inline que cria a UI — nunca um <div id="root"></div> vazio
 Never truncate. No TODOs.
 ${ctx}`
+      break
     default:
-      return `Respond ONLY with a single valid JSON object — no markdown.
+      body = `Respond ONLY with a single valid JSON object — no markdown.
 Shape: { "files": [...], "previewHtml": "FINAL polished standalone HTML5 doc", "plan": "resumo em PT do projeto", "projectName": "kebab-case" }
 Continuação — ${kind}. Gera APENAS a Fatia 4 — INTEGRAÇÃO & ATIVAÇÃO:
 - Configs de integração (${mode === "program" ? "src-tauri/tauri.conf.json, capacitor.config.ts, " : ""}vite.config.ts, tailwind.config.ts, README.md, index.html)
@@ -251,6 +273,7 @@ Continuação — ${kind}. Gera APENAS a Fatia 4 — INTEGRAÇÃO & ATIVAÇÃO:
 Never truncate. No TODOs.
 ${ctx}`
   }
+  return DETERMINISTIC_CORE + body
 }
 
 function healPrompt(baseUser: string, errors: string[]): string {
@@ -259,7 +282,8 @@ function healPrompt(baseUser: string, errors: string[]): string {
 AUTOCORREÇÃO: A fatia anterior falhou na validação estática. Erros exatos:
 ${errors.map((e) => `- ${e}`).join("\n")}
 
-Corrige TODOS os erros e devolve a fatia completa. FORMATO OBRIGATÓRIO (um de):
+Corrige TODOS os erros e devolve a fatia completa. LEI 5 — TRAVA DE CORREÇÃO: corrige EXCLUSIVAMENTE a falha reportada — PROIBIDO alterar design, cores, textos funcionais ou arquitetura.
+FORMATO OBRIGATÓRIO (um de):
 1. JSON válido: { "files": [{ "path": "src/x.ts", "content": "..." }] }
 2. Ou blocos markdown com caminho declarado: src/App.tsx seguido de \`\`\`tsx ... \`\`\`
 Nunca omitas conteúdo, nunca devolvas texto solto sem ficheiros.`
@@ -408,6 +432,13 @@ export async function runPsoGeneration(options: {
         providerUsed = res.provider
         modelUsed = res.model
 
+        /* LEI 1 — pedido fora do escopo técnico → rejeição padrão */
+        if (res.text.includes("FORA DE ESCOPO") || res.text.includes("OUT_OF_SCOPE")) {
+          throw new Error(
+            "Pedido fora de escopo: o motor gera apenas aplicativos, programas, websites e web apps."
+          )
+        }
+
         const parsed = parseModelOutput(res.text)
 
         sliceFiles = parsed.files
@@ -451,7 +482,11 @@ export async function runPsoGeneration(options: {
         break
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Erro desconhecido"
-        if (msg.startsWith("NO_KEY:") || msg.startsWith("AUTH:")) {
+        if (
+          msg.startsWith("NO_KEY:") ||
+          msg.startsWith("AUTH:") ||
+          msg.startsWith("Pedido fora de escopo")
+        ) {
           status.status = "failed"
           emit("error", msg.replace(/^(NO_KEY|AUTH):/, ""), { sliceId: slice.id })
           throw err
