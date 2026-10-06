@@ -1,16 +1,16 @@
 export interface Car {
   id: string;
-  model: string;
   brand: string;
+  model: string;
   year: number;
   price: number;
-  imageUrl: string;
   description: string;
+  imageUrl: string;
 }
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  favorites: string[]; // array of car IDs
+  favorites: string[]; // array of car ids
 }
