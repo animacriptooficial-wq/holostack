@@ -9,6 +9,8 @@ import {
   PSO_SLICES,
   SliceStatus,
   PsoResult,
+  validatePreviewHtml,
+  compilePreviewFromSource,
 } from "@/lib/pso"
 import {
   runGuardedGeneration,
@@ -203,9 +205,12 @@ function GeneratorInner() {
         filesRef.current = s.files
         setActiveFile(s.files[0]?.path || null)
       }
-      if (s.previewHtml) {
+      if (s.previewHtml && validatePreviewHtml(s.previewHtml).length === 0) {
         setPreviewHtml(s.previewHtml)
         aiPreviewRef.current = true
+      } else if (s.files?.length) {
+        /* Preview anterior inválido → mostra o HUD até recompilar */
+        setPreviewHtml(buildProgressPreview(s.files, s.sliceStatus || [], s.mode || "site"))
       }
       if (s.sliceStatus?.length) updateSlices(() => s.sliceStatus!)
       if (s.result) setResult(s.result)
@@ -226,6 +231,21 @@ function GeneratorInner() {
                 "system",
                 `⛨ Workspace re-hidratado do disco — ${d.fileCount} ficheiros lidos de generated/${projName}`
               )
+            }
+            /* Preview guardado inválido (tela branca) → recompila a partir do código-fonte */
+            const restoredPreview = s.previewHtml || ""
+            const filesForPreview = d?.files?.length ? d.files : s.files || []
+            if (validatePreviewHtml(restoredPreview).length > 0 && filesForPreview.length > 0) {
+              pushMsg("system", "⛨ Preview anterior inválido — compilador dedicado a reconstruir...")
+              compilePreviewFromSource(filesForPreview, s.mode || "site", undefined, () => {})
+                .then((html) => {
+                  if (html && validatePreviewHtml(html).length === 0) {
+                    aiPreviewRef.current = true
+                    setPreviewHtml(html)
+                    pushMsg("system", "✓ Preview recompilado — aplicação renderizável no iframe")
+                  }
+                })
+                .catch(() => {})
             }
           })
           .catch(() => {})

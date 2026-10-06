@@ -262,6 +262,57 @@ Corrige TODOS os erros e devolve a fatia completa. FORMATO OBRIGATÓRIO (um de):
 Nunca omitas conteúdo, nunca devolvas texto solto sem ficheiros.`
 }
 
+/* ---------------- Compilador de Preview dedicado ----------------
+   Quando as fatias não devolvem um previewHtml standalone válido,
+   uma chamada extra converte o código-fonte gerado num documento
+   HTML 100% inline — com orçamento de tokens exclusivo para a UI. */
+
+export async function compilePreviewFromSource(
+  allFiles: GeneratedFile[],
+  mode: GenerationMode,
+  providerId: string | undefined,
+  emit: (t: PsoEventType, text: string, extra?: Partial<PsoEvent>) => void
+): Promise<string> {
+  const keyFiles = allFiles
+    .filter((f) => /\.(tsx|jsx|html|css|ts|js)$/.test(f.path))
+    .sort((a, b) => (a.path.includes("App") ? -1 : b.path.includes("App") ? 1 : 0))
+    .slice(0, 12)
+
+  const bundle = keyFiles
+    .map((f) => `--- FICHEIRO: ${f.path} ---\n${f.content.slice(0, 6000)}`)
+    .join("\n\n")
+
+  const res = await callModel({
+    systemPrompt: `És um compilador de preview. Recebes o código-fonte de ${mode === "site" ? "um site/web app" : "um programa"} e devolves EXATAMENTE UM documento HTML5 standalone que renderiza a interface dessa aplicação de forma fiel e funcional.
+
+REGRAS ABSOLUTAS:
+- Responde APENAS com o documento HTML completo — sem JSON, sem markdown, sem explicações
+- TODO o CSS e JS INLINE dentro do HTML — <style> e <script> inline
+- PROIBIDO: src= ou href= relativos, <script src>, imports, fetch a ficheiros, <div id="root"></div> vazio
+- A UI tem de renderizar conteúdo real e visível: layout, menus, botões, textos da app — reproduzindo fielmente o design do código
+- Interações via JS vanilla inline (navegação, cliques, estado simples)
+- Dark theme elegante e polido`,
+    userPrompt: `Converte esta aplicação num preview HTML standalone funcional:\n\n${bundle}`,
+    providerId,
+    maxTokens: 16000,
+  })
+
+  const text = res.text.trim()
+  /* O modelo pode devolver HTML direto, dentro de fence, ou JSON com previewHtml */
+  const fence = text.match(/```(?:html)?\s*([\s\S]*?)```/)
+  const candidate = fence ? fence[1].trim() : text
+  if (/<html[\s>]|<!doctype/i.test(candidate)) return candidate
+
+  try {
+    const parsed = parseModelOutput(text)
+    if (parsed.previewHtml) return parsed.previewHtml
+  } catch {
+    /* ignora */
+  }
+  emit("info", "Compilador de preview: resposta não continha HTML utilizável")
+  return ""
+}
+
 /* ---------------- Orquestrador PSO ---------------- */
 
 export async function runPsoGeneration(options: {
@@ -429,6 +480,37 @@ export async function runPsoGeneration(options: {
       emit("sync", `Fatia ${slice.id}: sync bloqueado — 0 ficheiros extraídos, nada a gravar`, {
         sliceId: slice.id,
       })
+    }
+  }
+
+  /* Compilador de preview: se o HTML final não renderiza (refs
+     externas, root vazio, ausente), uma chamada dedicada converte
+     o código-fonte num documento standalone real */
+  const previewErrors = previewHtml ? validatePreviewHtml(previewHtml) : ["ausente"]
+  if (previewErrors.length > 0 && allFiles.length > 0) {
+    emit(
+      "info",
+      `Preview ${previewHtml ? "inválido" : "ausente"} (${previewErrors[0].slice(0, 60)}) — compilador dedicado ativado`
+    )
+    try {
+      const compiled = await compilePreviewFromSource(allFiles, mode, providerId, emit)
+      const errs = compiled ? validatePreviewHtml(compiled) : ["vazio"]
+      if (compiled && errs.length === 0) {
+        previewHtml = compiled
+        emit("preview", "Preview compilado — aplicação renderizável no iframe", { previewHtml })
+      } else {
+        emit(
+          "slice-warning",
+          `Compilador de preview: resultado falhou validação (${errs[0]?.slice(0, 80)})`,
+          {}
+        )
+      }
+    } catch (err) {
+      emit(
+        "slice-warning",
+        `Compilador de preview falhou: ${err instanceof Error ? err.message : "erro"}`,
+        {}
+      )
     }
   }
 
