@@ -201,7 +201,9 @@ export function validatePreviewHtml(html: string): string[] {
 
 const JSON_CONTRACT = `Respond ONLY with a single valid JSON object — no markdown, no commentary.
 Shape: { "files": [{ "path": "relative/path.ext", "content": "COMPLETE file content" }] }
-Never truncate file content. Never write TODO, FIXME or placeholder comments.`
+Never truncate file content. Never write TODO, FIXME or placeholder comments.
+CONTEÚDO 100% REALISTA E DETALHADO do domínio pedido — nomes, preços, specs, descrições e imagens CSS/gradientes ricos. PROIBIDO conteúdo genérico: "Item 1", "Model 1", "Product A", "Details about", "Lorem ipsum" ou dados de placeholder — cada entidade tem de ter dados concretos e credíveis (ex.: site de carros de luxo → "Lamborghini Revuelto", "€610.000", "1015 cv V12 híbrido").
+PROIBIDO fetch()/axios/XMLHttpRequest para APIs ou backends que não existem nos ficheiros gerados — toda a informação vive em arrays/objetos TypeScript, stores ou constantes locais.`
 
 function slicePrompt(
   slice: PsoSlice,
@@ -507,45 +509,43 @@ export async function runPsoGeneration(options: {
     }
   }
 
-  /* Compilador de preview: se o HTML final não renderiza (refs
-     externas, root vazio, ausente), uma chamada dedicada converte
-     o código-fonte num documento standalone real */
+  /* Código real compilado tem SEMPRE prioridade sobre o previewHtml
+     das fatias — o HTML da IA é uma aproximação genérica; o bundle
+     executa os ficheiros verdadeiros com os dados reais. O previewHtml
+     da IA só serve quando o bundling falha. */
   const previewErrors = previewHtml ? validatePreviewHtml(previewHtml) : ["ausente"]
-  if (previewErrors.length > 0 && allFiles.length > 0) {
+  const bundled = allFiles.length > 0 ? await bundleRuntimePreview(allFiles, projectName) : { html: "", url: "" }
+  if (bundled.html && validatePreviewHtml(bundled.html).length === 0) {
+    previewHtml = bundled.html
+    emit("preview", "Preview real compilado — o teu código executa no iframe", {
+      previewHtml,
+      previewUrl: bundled.url,
+    })
+  } else if (previewErrors.length > 0 && allFiles.length > 0) {
     emit(
       "info",
-      `Preview ${previewHtml ? "inválido" : "ausente"} (${previewErrors[0].slice(0, 60)}) — a bundlar o código real`
+      `Preview ${previewHtml ? "inválido" : "ausente"} (${previewErrors[0].slice(0, 60)}) e bundling falhou — compilador IA`
     )
-    /* 1) Bundling determinístico do código-fonte (esbuild, tudo inline) */
-    const bundled = await bundleRuntimePreview(allFiles, projectName)
-    if (bundled.html && validatePreviewHtml(bundled.html).length === 0) {
-      previewHtml = bundled.html
-      emit("preview", "Preview real compilado — o teu código executa no iframe", {
-        previewHtml,
-        previewUrl: bundled.url,
-      })
-    } else {
-      /* 2) Fallback: compilador de preview via IA */
-      try {
-        const compiled = await compilePreviewFromSource(allFiles, mode, providerId, emit)
-        const errs = compiled ? validatePreviewHtml(compiled) : ["vazio"]
-        if (compiled && errs.length === 0) {
-          previewHtml = compiled
-          emit("preview", "Preview compilado — aplicação renderizável no iframe", { previewHtml })
-        } else {
-          emit(
-            "slice-warning",
-            `Compilador de preview: resultado falhou validação (${errs[0]?.slice(0, 80)})`,
-            {}
-          )
-        }
-      } catch (err) {
+    /* Fallback: compilador de preview via IA */
+    try {
+      const compiled = await compilePreviewFromSource(allFiles, mode, providerId, emit)
+      const errs = compiled ? validatePreviewHtml(compiled) : ["vazio"]
+      if (compiled && errs.length === 0) {
+        previewHtml = compiled
+        emit("preview", "Preview compilado — aplicação renderizável no iframe", { previewHtml })
+      } else {
         emit(
           "slice-warning",
-          `Compilador de preview falhou: ${err instanceof Error ? err.message : "erro"}`,
+          `Compilador de preview: resultado falhou validação (${errs[0]?.slice(0, 80)})`,
           {}
         )
       }
+    } catch (err) {
+      emit(
+        "slice-warning",
+        `Compilador de preview falhou: ${err instanceof Error ? err.message : "erro"}`,
+        {}
+      )
     }
   }
 
