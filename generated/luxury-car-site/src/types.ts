@@ -1,12 +1,12 @@
-export type User = {
+export interface Car {
   id: string;
   name: string;
-  email: string;
-};
+  price: string;
+  horsepower: number;
+  imageUrl: string;
+  description: string;
+}
 
-export type Post = {
-  id: string;
-  title: string;
-  content: string;
-  authorId: string;
-};
+export interface CarCollection {
+  cars: Car[];
+}
