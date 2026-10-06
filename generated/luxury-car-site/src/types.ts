@@ -2,8 +2,7 @@ export type Car = {
   id: string;
   name: string;
   price: string;
-  horsepower: string;
+  horsepower: number;
   engine: string;
-  image: string;
-  description: string;
+  imageUrl: string;
 };
