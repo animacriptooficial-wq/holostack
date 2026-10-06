@@ -159,6 +159,7 @@ function GeneratorInner() {
   const [buildLog, setBuildLog] = useState<string[]>([])
   const [files, setFiles] = useState<GeneratedFile[]>([])
   const [previewHtml, setPreviewHtml] = useState("")
+  const [previewUrl, setPreviewUrl] = useState("")
   const [sliceStatus, setSliceStatus] = useState<SliceStatus[]>([])
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"preview" | "files" | "build">("preview")
@@ -193,6 +194,7 @@ function GeneratorInner() {
         projectName?: string
         files?: GeneratedFile[]
         previewHtml?: string
+        previewUrl?: string
         messages?: ChatMessage[]
         buildLog?: string[]
         sliceStatus?: SliceStatus[]
@@ -206,6 +208,7 @@ function GeneratorInner() {
         filesRef.current = s.files
         setActiveFile(s.files[0]?.path || null)
       }
+      if (s.previewUrl) setPreviewUrl(s.previewUrl)
       if (s.previewHtml && validatePreviewHtml(s.previewHtml).length === 0) {
         setPreviewHtml(s.previewHtml)
         aiPreviewRef.current = true
@@ -238,9 +241,12 @@ function GeneratorInner() {
             const filesForPreview = d?.files?.length ? d.files : s.files || []
             if (validatePreviewHtml(restoredPreview).length > 0 && filesForPreview.length > 0) {
               pushMsg("system", "⛨ Preview anterior inválido — a bundlar o código real...")
-              bundleRuntimePreview(filesForPreview)
-                .then(async (html) => {
-                  if (html && validatePreviewHtml(html).length === 0) return html
+              bundleRuntimePreview(filesForPreview, projName)
+                .then(async (b) => {
+                  if (b.html && validatePreviewHtml(b.html).length === 0) {
+                    if (b.url) setPreviewUrl(b.url)
+                    return b.html
+                  }
                   return compilePreviewFromSource(filesForPreview, s.mode || "site", undefined, () => {})
                 })
                 .then((html) => {
@@ -273,6 +279,7 @@ function GeneratorInner() {
         projectName: projectNameRef.current,
         files,
         previewHtml,
+        previewUrl,
         messages,
         buildLog,
         sliceStatus,
@@ -285,7 +292,7 @@ function GeneratorInner() {
     } catch {
       /* quota excedida — o disco continua a guardar os ficheiros */
     }
-  }, [mounted, files, previewHtml, messages, buildLog, sliceStatus, result, mode])
+  }, [mounted, files, previewHtml, previewUrl, messages, buildLog, sliceStatus, result, mode])
 
   /* Watchdog 24/7 — subscreve o estado de saúde e sonda a API a cada 30s */
   useEffect(() => {
@@ -367,6 +374,7 @@ function GeneratorInner() {
           if (e.type === "preview") {
             aiPreviewRef.current = true
             setPreviewHtml(e.previewHtml || "")
+            if (e.previewUrl) setPreviewUrl(e.previewUrl)
             return
           }
           if (e.type === "files") {
@@ -457,6 +465,10 @@ function GeneratorInner() {
 
   /* Abre a aplicação gerada num separador real do browser */
   const openLiveApp = () => {
+    if (previewUrl) {
+      window.open(previewUrl, "_blank")
+      return
+    }
     if (!previewHtml) return
     const blob = new Blob([previewHtml], { type: "text/html" })
     window.open(URL.createObjectURL(blob), "_blank")
@@ -912,7 +924,8 @@ function GeneratorInner() {
                     </div>
                     {previewHtml ? (
                       <iframe
-                        srcDoc={previewHtml}
+                        src={previewUrl || undefined}
+                        srcDoc={previewUrl ? undefined : previewHtml}
                         title="Preview ao vivo"
                         sandbox="allow-scripts allow-same-origin"
                         className="flex-1 w-full bg-white"

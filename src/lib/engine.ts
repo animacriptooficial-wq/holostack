@@ -340,6 +340,13 @@ export async function callModel(options: {
     }
 
     if (res.status === 401 || res.status === 403) {
+      /* Chave local rejeitada pelo provider → elimina-a para não
+         voltar a envenenar gerações futuras */
+      if (key && typeof window !== "undefined") {
+        const keys = getStoredKeys()
+        delete keys[provider.id]
+        localStorage.setItem(KEYS_STORAGE, JSON.stringify(keys))
+      }
       lastAuthError = authError(provider.name, res.status)
       continue /* tenta o próximo provider */
     }

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import * as esbuild from "esbuild"
+import { promises as fsp } from "fs"
+import path from "path"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -88,7 +90,7 @@ function escapeInline(code: string, tag: string): string {
 }
 
 export async function POST(req: Request) {
-  let body: { files?: PreviewFile[] }
+  let body: { files?: PreviewFile[]; project?: string }
   try {
     body = await req.json()
   } catch {
@@ -336,7 +338,22 @@ ${escapeInline(js, "script")}
 </body>
 </html>`
 
-    return NextResponse.json({ ok: true, html, bundled: true, entry })
+    /* Persiste o preview como página real em /previews/<proj>.html —
+       o iframe carrega por URL (sem srcDoc, sem localStorage, F5-safe).
+       Na Vercel o fs é read-only → falha silenciosa, o html é devolvido
+       na mesma e o cliente usa srcDoc como fallback. */
+    let url = ""
+    const slug = (body.project || "preview").replace(/[^\w-]/g, "-").toLowerCase()
+    try {
+      const dir = path.join(process.cwd(), "public", "previews")
+      await fsp.mkdir(dir, { recursive: true })
+      await fsp.writeFile(path.join(dir, `${slug}.html`), html, "utf8")
+      url = `/previews/${slug}.html`
+    } catch {
+      url = ""
+    }
+
+    return NextResponse.json({ ok: true, html, url, bundled: true, entry })
   } catch (err) {
     const msg = err instanceof Error ? err.message : "erro"
     return NextResponse.json(

@@ -34,3 +34,7 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# previews compilados em runtime
+public/previews/
+dev-server.log

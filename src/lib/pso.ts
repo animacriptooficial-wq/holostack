@@ -64,6 +64,7 @@ export interface PsoEvent {
   text: string
   files?: GeneratedFile[]
   previewHtml?: string
+  previewUrl?: string
 }
 
 export interface PsoResult {
@@ -271,19 +272,22 @@ Nunca omitas conteúdo, nunca devolvas texto solto sem ficheiros.`
    e devolve um documento self-contained (importmap → esm.sh).
    Determinístico — não depende de IA nem de chaves de API. */
 export async function bundleRuntimePreview(
-  allFiles: GeneratedFile[]
-): Promise<string> {
+  allFiles: GeneratedFile[],
+  project?: string
+): Promise<{ html: string; url: string }> {
   try {
     const res = await fetch("/api/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ files: allFiles }),
+      body: JSON.stringify({ files: allFiles, project }),
     })
     const data = await res.json().catch(() => null)
-    if (res.ok && data?.ok && typeof data.html === "string") return data.html
-    return ""
+    if (res.ok && data?.ok && typeof data.html === "string") {
+      return { html: data.html, url: typeof data.url === "string" ? data.url : "" }
+    }
+    return { html: "", url: "" }
   } catch {
-    return ""
+    return { html: "", url: "" }
   }
 }
 
@@ -512,11 +516,14 @@ export async function runPsoGeneration(options: {
       "info",
       `Preview ${previewHtml ? "inválido" : "ausente"} (${previewErrors[0].slice(0, 60)}) — a bundlar o código real`
     )
-    /* 1) Bundling determinístico do código-fonte (esbuild + importmap) */
-    const bundled = await bundleRuntimePreview(allFiles)
-    if (bundled && validatePreviewHtml(bundled).length === 0) {
-      previewHtml = bundled
-      emit("preview", "Preview real compilado — o teu código executa no iframe", { previewHtml })
+    /* 1) Bundling determinístico do código-fonte (esbuild, tudo inline) */
+    const bundled = await bundleRuntimePreview(allFiles, projectName)
+    if (bundled.html && validatePreviewHtml(bundled.html).length === 0) {
+      previewHtml = bundled.html
+      emit("preview", "Preview real compilado — o teu código executa no iframe", {
+        previewHtml,
+        previewUrl: bundled.url,
+      })
     } else {
       /* 2) Fallback: compilador de preview via IA */
       try {
