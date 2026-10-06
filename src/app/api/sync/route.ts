@@ -3,6 +3,8 @@ import { execFileSync } from "child_process"
 import fs from "fs/promises"
 import { existsSync, readdirSync } from "fs"
 import path from "path"
+import { githubConfig, commitFilesToGitHub } from "@/lib/github"
+import { supabaseConfig, supabaseSaveFiles } from "@/lib/supabase"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -111,35 +113,84 @@ export async function POST(req: Request) {
   const targetDir = path.join(root, "generated", projectName)
 
   /* ─────────────────────────────────────────────────────────────
-     FASE 1 — GRAVAÇÃO FÍSICA (totalmente isolada do git)
-     Cada ficheiro é gravado de forma independente: a falha de um
-     nunca aborta os restantes, e NADA nesta fase depende do git.
+     FASE 1 — GRAVAÇÃO FÍSICA (só em ambiente local; na Vercel o
+     fs é read-only e cada write falha — detetado e tolerado)
   ───────────────────────────────────────────────────────────── */
   let written = 0
   let writePhaseFailed = false
-  for (const file of files) {
+  const isServerless = !!process.env.VERCEL
+  if (!isServerless) {
+    for (const file of files) {
+      try {
+        const rel = safeRelativePath(file.path)
+        if (!rel) {
+          log.push(`✗ caminho inválido ignorado: ${file.path}`)
+          continue
+        }
+        const fullPath = path.join(targetDir, rel)
+        if (!fullPath.startsWith(targetDir)) {
+          log.push(`✗ caminho fora do diretório ignorado: ${file.path}`)
+          continue
+        }
+        await fs.mkdir(path.dirname(fullPath), { recursive: true })
+        await fs.writeFile(fullPath, file.content, "utf-8")
+        written++
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "falha de escrita"
+        log.push(`✗ falha ao gravar ${file.path}: ${msg}`)
+        writePhaseFailed = true
+      }
+    }
+    log.push(`✓ ${written}/${files.length} ficheiros escritos em generated/${projectName}`)
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     FASE 2 — SUPABASE (persistência cloud da base de dados)
+  ───────────────────────────────────────────────────────────── */
+  const sb = supabaseConfig()
+  if (sb && files.length > 0) {
+    const res = await supabaseSaveFiles(sb, projectName, files)
+    log.push(
+      res.ok
+        ? `✓ Supabase — ${files.length} ficheiros persistidos na nuvem`
+        : `✗ Supabase falhou: ${res.error}`
+    )
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     FASE 3 — GITHUB API (cloud-native: commit direto no repo via
+     REST, sem binário git — é o caminho único na Vercel)
+  ───────────────────────────────────────────────────────────── */
+  const gh = githubConfig()
+  if (gh && files.length > 0) {
     try {
-      const rel = safeRelativePath(file.path)
-      if (!rel) {
-        log.push(`✗ caminho inválido ignorado: ${file.path}`)
-        continue
-      }
-      const fullPath = path.join(targetDir, rel)
-      if (!fullPath.startsWith(targetDir)) {
-        log.push(`✗ caminho fora do diretório ignorado: ${file.path}`)
-        continue
-      }
-      await fs.mkdir(path.dirname(fullPath), { recursive: true })
-      await fs.writeFile(fullPath, file.content, "utf-8")
-      written++
+      const sha = await commitFilesToGitHub(
+        gh,
+        `generated/${projectName}`,
+        files,
+        `feat(holostack): auto-build [Fatia ${sliceId}] - verified & self-healed`
+      )
+      log.push(`✓ GitHub API — commit ${sha.slice(0, 7)} pushed para ${gh.repo}`)
+      return NextResponse.json({
+        ok: !writePhaseFailed,
+        phase: "sync",
+        written,
+        cloud: true,
+        log,
+      })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "falha de escrita"
-      log.push(`✗ falha ao gravar ${file.path}: ${msg}`)
-      writePhaseFailed = true
-      /* continua para os restantes ficheiros — nunca aborta */
+      log.push(`✗ GitHub API falhou: ${err instanceof Error ? err.message : "erro"}`)
+      /* continua para o git local se existir */
     }
   }
-  log.push(`✓ ${written}/${files.length} ficheiros escritos em generated/${projectName}`)
+
+  /* ─────────────────────────────────────────────────────────────
+     FASE 4 — GIT LOCAL (apenas dev local com binário disponível)
+  ───────────────────────────────────────────────────────────── */
+  if (isServerless) {
+    return NextResponse.json({ ok: true, phase: "sync", written, cloud: true, log })
+  }
+
 
   /* ─────────────────────────────────────────────────────────────
      FASE 2 — GIT (opcional; qualquer falha aqui é apenas warning,

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import fs from "fs/promises"
 import path from "path"
+import { githubConfig, readDirFromGitHub } from "@/lib/github"
+import { supabaseConfig, supabaseReadFiles } from "@/lib/supabase"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -23,8 +25,23 @@ export async function GET(req: Request) {
     const stat = await fs.stat(root)
     if (!stat.isDirectory()) throw new Error("não é diretório")
   } catch {
+    /* Sem disco (Vercel serverless) — fallbacks cloud */
+    const sb = supabaseConfig()
+    if (sb) {
+      const rows = await supabaseReadFiles(sb, project)
+      if (rows.length > 0) {
+        return NextResponse.json({ ok: true, project, files: rows, fileCount: rows.length, source: "supabase" })
+      }
+    }
+    const gh = githubConfig()
+    if (gh) {
+      const remote = await readDirFromGitHub(gh, `generated/${project}`)
+      if (remote.length > 0) {
+        return NextResponse.json({ ok: true, project, files: remote, fileCount: remote.length, source: "github" })
+      }
+    }
     return NextResponse.json(
-      { ok: false, error: `Projeto "${project}" não existe em generated/` },
+      { ok: false, error: `Projeto "${project}" não existe em generated/ nem na nuvem` },
       { status: 404 }
     )
   }

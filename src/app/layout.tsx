@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import { AuthProvider } from "@/lib/auth"
 import { ThemeProvider } from "@/lib/theme"
+import { BackToTop } from "@/components/BackToTop"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -21,6 +22,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider>
           <AuthProvider>{children}</AuthProvider>
+          <BackToTop />
         </ThemeProvider>
       </body>
     </html>

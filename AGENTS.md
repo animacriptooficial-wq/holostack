@@ -87,6 +87,39 @@ The selector UI with 10 interactive buttons is at `/x7k2m9q4-admin/appearance`.
 - Zero TODO/FIXME comments, no placeholder code
 - ESLint is not installed/configured — `npm run build` skips linting with a warning
 
+## Cloud-Native Configuration (Vercel env vars)
+
+Configure no painel Vercel → Settings → Environment Variables:
+
+| Variável | Obrigatória | Função |
+|---|---|---|
+| `OPENAI_API_KEY` | Sim (ou via /settings) | Chave OpenAI para o motor de geração |
+| `GITHUB_TOKEN` | Cloud sync | Token PAT com scope `repo` — commit via REST API |
+| `GITHUB_REPO` | Cloud sync | `owner/repo` (ex: `animacriptooficial-wq/holostack`) |
+| `GITHUB_BRANCH` | Opcional | Default `main` |
+| `SUPABASE_URL` | Persistência cloud | URL do projeto Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | Persistência cloud | Service role key (ou `SUPABASE_ANON_KEY`) |
+
+### Supabase — SQL da tabela de persistência
+
+```sql
+create table if not exists holostack_files (
+  project text not null,
+  path text not null,
+  content text not null,
+  updated_at timestamptz default now(),
+  primary key (project, path)
+);
+alter table holostack_files enable row level security;
+create policy "service_full" on holostack_files for all using (true) with check (true);
+```
+
+### Arquitetura de sync (cascata)
+
+`/api/sync` → 1) disco local (só dev) → 2) Supabase (cloud) → 3) GitHub REST API (cloud, sem git binário) → 4) git local (fallback dev).
+`/api/files` → disco → Supabase → GitHub (fallbacks em cascata).
+`/api/preview` → bundling esbuild 100% server-side; escreve `public/previews/` só localmente.
+
 ## Known Limitations
 - Google OAuth, infrastructure provisioning (GitHub/Vercel/Supabase), and login flows are client-side simulations — no backend exists. Production deployment requires real OAuth callbacks and provider API calls.
 - TOTP is cryptographically real (RFC 6238), but secrets are stored in localStorage rather than a server-side store.
