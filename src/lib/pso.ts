@@ -1,6 +1,7 @@
 "use client"
 
 import { callModel, parseModelOutput, ensureProvider, GeneratedFile, GenerationMode } from "./engine"
+import { withStarterFiles } from "./starter"
 
 /* ============================================================
    PSO — Prompt Slicing & Optimization
@@ -239,9 +240,11 @@ function slicePrompt(
     case 1:
       body = `${JSON_CONTRACT}
 Estás a construir ${kind}. Gera APENAS a Fatia 1 — ARQUITETURA & DADOS:
-- package.json completo (deps: react, typescript, tailwindcss, vite, zustand, lucide-react${mode === "program" ? ", @tauri-apps/api, @capacitor/core" : ""})
-- tsconfig.json, tipos e esquemas TypeScript (src/types.ts)
-- estrutura de rotas/base (src/config.ts ou app structure)
+O scaffold oficial já existe e NÃO deve ser regenerado: package.json, vite.config.ts, tsconfig*.json, tailwind/postcss configs, index.html, src/main.tsx, src/index.css.
+Gera apenas ficheiros de domínio:
+- tipos e esquemas TypeScript (src/types.ts)
+- dados reais do domínio em arrays/constantes (src/data/*.ts) — com specs completas e credíveis
+- estrutura de rotas/base (src/config.ts)${mode === "program" ? "\n- package.json de program pode ser reescrito SE precisar de deps tauri/capacitor" : ""}
 ${ctx}`
       break
     case 2:
@@ -550,12 +553,24 @@ export async function runPsoGeneration(options: {
     }
   }
 
+  /* Scaffold oficial bolt.diy como base: package.json, vite.config,
+     tsconfig, tailwind, index.html e main.tsx são garantidos — a IA
+     só sobrepõe o que gerou explicitamente. Assim há SEMPRE um
+     package.json válido → WebContainer/npm install funcionam sempre. */
+  const finalFiles = withStarterFiles(allFiles)
+  if (finalFiles.length > allFiles.length) {
+    emit(
+      "info",
+      `Scaffold oficial bolt.diy aplicado — ${finalFiles.length - allFiles.length} ficheiros base garantidos (package.json, vite, tailwind, tsconfig)`
+    )
+  }
+
   /* Código real compilado tem SEMPRE prioridade sobre o previewHtml
      das fatias — o HTML da IA é uma aproximação genérica; o bundle
      executa os ficheiros verdadeiros com os dados reais. O previewHtml
      da IA só serve quando o bundling falha. */
   const previewErrors = previewHtml ? validatePreviewHtml(previewHtml) : ["ausente"]
-  const bundled = allFiles.length > 0 ? await bundleRuntimePreview(allFiles, projectName) : { html: "", url: "" }
+  const bundled = finalFiles.length > 0 ? await bundleRuntimePreview(finalFiles, projectName) : { html: "", url: "" }
   if (bundled.html && validatePreviewHtml(bundled.html).length === 0) {
     previewHtml = bundled.html
     emit("preview", "Preview real compilado — o teu código executa no iframe", {
@@ -590,11 +605,11 @@ export async function runPsoGeneration(options: {
     }
   }
 
-  emit("done", `Motor PSO concluído — ${allFiles.length} ficheiros verificados e integrados`)
+  emit("done", `Motor PSO concluído — ${finalFiles.length} ficheiros (${finalFiles.length - allFiles.length} do scaffold oficial)`)
   return {
     projectName,
     plan: plan || "Projeto gerado pelo HoloStack PSO Engine.",
-    files: allFiles,
+    files: finalFiles,
     previewHtml,
     provider: providerUsed,
     model: modelUsed,
