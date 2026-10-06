@@ -1,12 +1,15 @@
-export type User = {
+export interface Car {
+  id: string;
+  make: string;
+  model: string;
+  year: number;
+  price: number;
+  imageUrl: string;
+}
+
+export interface User {
   id: string;
   name: string;
   email: string;
-};
-
-export type Post = {
-  id: string;
-  title: string;
-  content: string;
-  authorId: string;
-};
+  favorites: string[]; // Array of car IDs
+}

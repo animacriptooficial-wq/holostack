@@ -1,7 +1,8 @@
-export const routes = {
-  home: '/',
-  about: '/about',
-  contact: '/contact',
-  posts: '/posts',
-  postDetail: (id: string) => `/posts/${id}`
+export const ROUTES = {
+  HOME: '/',
+  CARS: '/cars',
+  CAR_DETAILS: (id: string) => `/cars/${id}`,
+  PROFILE: '/profile',
+  LOGIN: '/login',
+  REGISTER: '/register'
 };
