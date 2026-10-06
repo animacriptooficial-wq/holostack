@@ -1,16 +1,18 @@
 import create from 'zustand';
-import { Order } from './types';
+import { Car } from './types';
 
-interface OrderState {
-  orders: Order[];
-  addOrder: (order: Order) => void;
-  removeOrder: (orderId: string) => void;
-  updateOrder: (updatedOrder: Order) => void;
+interface CarStore {
+  cars: Car[];
+  selectedCar: Car | null;
+  selectCar: (id: string) => void;
+  loadCars: (cars: Car[]) => void;
 }
 
-export const useOrderStore = create<OrderState>((set) => ({
-  orders: [],
-  addOrder: (order) => set((state) => ({ orders: [...state.orders, order] })),
-  removeOrder: (orderId) => set((state) => ({ orders: state.orders.filter(order => order.id !== orderId) })),
-  updateOrder: (updatedOrder) => set((state) => ({ orders: state.orders.map(order => order.id === updatedOrder.id ? updatedOrder : order) })),
+export const useCarStore = create<CarStore>((set) => ({
+  cars: [],
+  selectedCar: null,
+  selectCar: (id) => set((state) => ({
+    selectedCar: state.cars.find((car) => car.id === id) || null
+  })),
+  loadCars: (cars) => set(() => ({ cars }))
 }));
