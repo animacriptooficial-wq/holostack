@@ -1,17 +1,16 @@
 import React from 'react';
-import Header from './components/Header';
 import CarList from './components/CarList';
-
-const cars = [
-  { model: 'Model S', brand: 'Tesla', price: '$80,000', imageUrl: 'https://example.com/tesla.jpg' },
-  { model: 'Ghost', brand: 'Rolls Royce', price: '$300,000', imageUrl: 'https://example.com/rolls.jpg' },
-  { model: 'Chiron', brand: 'Bugatti', price: '$3,000,000', imageUrl: 'https://example.com/bugatti.jpg' }
-];
+import { useCars } from './hooks/useCars';
 
 const App: React.FC = () => {
+  const { cars, loading, error } = useCars();
+
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p>Error loading cars.</p>;
+
   return (
-    <div style={{ backgroundColor: '#111', minHeight: '100vh', color: '#fff' }}>
-      <Header />
+    <div style={{ backgroundColor: '#121212', color: '#fff', minHeight: '100vh', padding: '20px' }}>
+      <h1 style={{ textAlign: 'center' }}>Luxury Cars</h1>
       <CarList cars={cars} />
     </div>
   );

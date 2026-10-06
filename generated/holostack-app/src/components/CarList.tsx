@@ -1,12 +1,6 @@
 import React from 'react';
+import { Car } from '../types';
 import CarCard from './CarCard';
-
-interface Car {
-  model: string;
-  brand: string;
-  price: string;
-  imageUrl: string;
-}
 
 interface CarListProps {
   cars: Car[];
@@ -14,9 +8,9 @@ interface CarListProps {
 
 const CarList: React.FC<CarListProps> = ({ cars }) => {
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', justifyContent: 'center', padding: '16px' }}>
-      {cars.map((car, index) => (
-        <CarCard key={index} {...car} />
+    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center' }}>
+      {cars.map(car => (
+        <CarCard key={car.id} car={car} />
       ))}
     </div>
   );

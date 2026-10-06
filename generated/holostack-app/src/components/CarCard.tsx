@@ -1,18 +1,17 @@
 import React from 'react';
+import { Car } from '../types';
 
 interface CarCardProps {
-  model: string;
-  brand: string;
-  price: string;
-  imageUrl: string;
+  car: Car;
 }
 
-const CarCard: React.FC<CarCardProps> = ({ model, brand, price, imageUrl }) => {
+const CarCard: React.FC<CarCardProps> = ({ car }) => {
   return (
-    <div style={{ border: '1px solid #444', borderRadius: '8px', padding: '16px', backgroundColor: '#333', color: '#fff', maxWidth: '300px' }}>
-      <img src={imageUrl} alt={`${brand} ${model}`} style={{ width: '100%', borderRadius: '8px' }} />
-      <h2>{brand} {model}</h2>
-      <p>Price: {price}</p>
+    <div style={{ border: '1px solid #333', padding: '10px', borderRadius: '5px', margin: '10px', backgroundColor: '#1e1e1e', color: '#fff' }}>
+      <h2>{car.make} {car.model}</h2>
+      <p>Year: {car.year}</p>
+      <p>Price: ${car.price.toLocaleString()}</p>
+      <img src={car.image} alt={`${car.make} ${car.model}`} style={{ width: '100%', borderRadius: '5px' }} />
     </div>
   );
 };
