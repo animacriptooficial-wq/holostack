@@ -1,20 +1,25 @@
 import React from 'react';
-import { useOrders } from './hooks/useOrders';
 import Header from './components/Header';
-import OrderList from './components/OrderList';
+import CarList from './components/CarList';
+import useCarData from './hooks/useCarData';
 
 const App: React.FC = () => {
-  const { orders } = useOrders();
+  const { cars } = useCarData();
 
   return (
-    <div style={{ backgroundColor: '#222', color: '#fff', minHeight: '100vh' }}>
+    <div style={styles.appContainer}>
       <Header />
-      <main style={{ padding: '20px' }}>
-        <h2 style={{ color: '#fff' }}>Orders</h2>
-        <OrderList orders={orders} />
-      </main>
+      <CarList cars={cars} />
     </div>
   );
+};
+
+const styles = {
+  appContainer: {
+    backgroundColor: '#121212',
+    minHeight: '100vh',
+    padding: '20px',
+  },
 };
 
 export default App;
