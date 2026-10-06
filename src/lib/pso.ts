@@ -432,14 +432,20 @@ export async function runPsoGeneration(options: {
         providerUsed = res.provider
         modelUsed = res.model
 
-        /* LEI 1 — pedido fora do escopo técnico → rejeição padrão */
-        if (res.text.includes("FORA DE ESCOPO") || res.text.includes("OUT_OF_SCOPE")) {
+        const parsed = parseModelOutput(res.text)
+
+        /* LEI 1 — só rejeita quando a resposta é EXCLUSIVAMENTE a recusa:
+           marcador de escopo E zero ficheiros extraídos (evita falso
+           positivo se o modelo mencionar a frase a meio do output) */
+        if (
+          parsed.files.length === 0 &&
+          !parsed.previewHtml &&
+          (res.text.includes("FORA DE ESCOPO") || res.text.includes("OUT_OF_SCOPE"))
+        ) {
           throw new Error(
             "Pedido fora de escopo: o motor gera apenas aplicativos, programas, websites e web apps."
           )
         }
-
-        const parsed = parseModelOutput(res.text)
 
         sliceFiles = parsed.files
         sliceErrors = sliceFiles.flatMap(validateFile)

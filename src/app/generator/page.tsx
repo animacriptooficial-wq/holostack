@@ -338,7 +338,10 @@ function GeneratorInner() {
   const pushLog = (line: string) => setBuildLog((prev) => [...prev, `[${now()}] ${line}`])
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    /* O chat agora cresce com a página (scroll nativo) — segue a escrita
+       do agente empurrando a JANELA para o fim a cada mensagem nova */
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" })
   }, [messages])
 
   const syncSlice = async (projectName: string, sliceId: number, allFiles: GeneratedFile[]): Promise<string[]> => {
