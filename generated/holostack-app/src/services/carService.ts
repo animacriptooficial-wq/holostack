@@ -11,27 +11,11 @@ export const fetchCars = async (): Promise<Car[]> => {
 export const createCar = async (car: Car): Promise<Car> => {
   const response = await fetch('/api/cars', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(car),
   });
   if (!response.ok) {
     throw new Error('Failed to create car');
-  }
-  return response.json();
-};
-
-export const updateCar = async (id: string, car: Partial<Car>): Promise<Car> => {
-  const response = await fetch(`/api/cars/${id}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(car),
-  });
-  if (!response.ok) {
-    throw new Error('Failed to update car');
   }
   return response.json();
 };
@@ -43,4 +27,16 @@ export const deleteCar = async (id: string): Promise<void> => {
   if (!response.ok) {
     throw new Error('Failed to delete car');
   }
+};
+
+export const updateCar = async (id: string, updatedCar: Partial<Car>): Promise<Car> => {
+  const response = await fetch(`/api/cars/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updatedCar),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to update car');
+  }
+  return response.json();
 };

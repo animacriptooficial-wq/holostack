@@ -8,10 +8,10 @@ export const useCars = () => {
   useEffect(() => {
     const loadCars = async () => {
       try {
-        const cars = await fetchCars();
-        cars.forEach(addCar);
+        const carsData = await fetchCars();
+        carsData.forEach(addCar);
       } catch (error) {
-        console.error('Failed to load cars', error);
+        console.error('Failed to load cars:', error);
       }
     };
 
