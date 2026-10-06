@@ -1,16 +1,27 @@
 # Luxury Car Site
 
-This project is a web application to showcase luxury cars using React and Tailwind CSS.
+This is a luxury car site built with React and Vite. It showcases a collection of high-end cars with detailed information and beautiful design.
 
-## Development
+## Getting Started
 
-- Install dependencies: `npm install`
-- Start the development server: `npm run dev`
+1. Install dependencies: `npm install`
+2. Run the development server: `npm run dev`
+3. Build for production: `npm run build`
 
-## Build
+## Technologies Used
 
-- Build for production: `npm run build`
+- React
+- Vite
+- Tailwind CSS
 
-## Preview
+## Project Structure
 
-- Preview the production build: `npm run preview`
+- `src/`: Contains all source code
+- `src/components`: React components
+- `src/services`: API service files
+- `src/store`: State management
+- `src/hooks`: Custom React hooks
+
+## Deployment
+
+The site can be deployed on any static site hosting service by using the built files in the `build` directory.

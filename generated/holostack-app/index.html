@@ -3,11 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Luxury Cars</title>
+  <title>Luxury Car Showcase</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body>
+<body class="bg-midnightBlack text-luxuryGold">
   <div id="root"></div>
-  <script type="module" src="/src/main.tsx"></script>
+  <script type="module">
+    import { createRoot } from 'https://unpkg.com/react-dom@17/umd/react-dom.production.min.js';
+    import App from '/src/App.tsx';
+    const root = createRoot(document.getElementById('root'));
+    root.render(App);
+  </script>
 </body>
 </html>

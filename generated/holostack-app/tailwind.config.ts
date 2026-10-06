@@ -1,9 +1,16 @@
 import type { Config } from 'tailwindcss';
 
-export default <Partial<Config>>{
-  content: ['./src/**/*.{js,ts,jsx,tsx}'],
+const config: Config = {
+  content: ['./src/**/*.{js,ts,jsx,tsx,html}'],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        luxuryGold: '#D4AF37',
+        midnightBlack: '#2C2C2C'
+      }
+    }
   },
-  plugins: [],
+  plugins: []
 };
+
+export default config;
