@@ -174,6 +174,7 @@ function GeneratorInner() {
   const aiPreviewRef = useRef(false)
   const slicesRef = useRef<SliceStatus[]>([])
   const filesRef = useRef<GeneratedFile[]>([])
+  const finalSiteRef = useRef<HTMLDivElement>(null)
   const [healthLevel, setHealthLevel] = useState<"ok" | "degraded" | "down">("ok")
 
   const updateSlices = (fn: (prev: SliceStatus[]) => SliceStatus[]) =>
@@ -372,6 +373,7 @@ function GeneratorInner() {
     setBuildLog([])
     setFiles([])
     setPreviewHtml("")
+    setPreviewUrl("")
     setResult(null)
     aiPreviewRef.current = false
     updateSlices(() =>
@@ -462,6 +464,9 @@ function GeneratorInner() {
             pushMsg("system", `⚠ WebContainer indisponível (${err instanceof Error ? err.message : "erro"}) — preview bundled mantido`)
           })
       }
+
+      /* Site pronto — leva o utilizador diretamente à secção final */
+      setTimeout(() => finalSiteRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 800)
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido"
       if (msg.startsWith("NO_KEY:")) {
@@ -1057,6 +1062,39 @@ function GeneratorInner() {
               </div>
             </div>
           </div>
+
+          {/* ===== SITE PRONTO — secção final a página inteira =====
+              Quando a geração termina, o produto final é mostrado aqui
+              em largura total (dev server real ou bundle compilado) */}
+          {(previewUrl || (result && previewHtml)) && (
+            <div ref={finalSiteRef} className="border-t-2 border-success/40 bg-surface/60 shrink-0">
+              <div className="px-5 py-3 flex items-center gap-3 border-b border-border">
+                <Monitor className="w-4 h-4 text-success" />
+                <span className="text-sm font-semibold text-text">
+                  Site pronto — {result?.projectName || projectNameRef.current}
+                </span>
+                {previewUrl && (
+                  <span className="text-xs text-textSecondary font-mono truncate max-w-[40%]">
+                    {previewUrl}
+                  </span>
+                )}
+                <button
+                  onClick={openLiveApp}
+                  className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-success text-black hover:opacity-90 transition-opacity"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Abrir em separador
+                </button>
+              </div>
+              <iframe
+                src={previewUrl || undefined}
+                srcDoc={previewUrl ? undefined : previewHtml}
+                title="Site final"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
+                className="w-full h-[85vh] bg-white"
+              />
+            </div>
+          )}
         </main>
       </div>
     </div>
