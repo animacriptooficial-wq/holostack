@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@webcontainer/api": "^1.6.1",
     "clsx": "^2.1.1",
     "esbuild": "^0.25.9",
     "jszip": "^3.10.1",

@@ -13,6 +13,7 @@ import {
   compilePreviewFromSource,
   bundleRuntimePreview,
 } from "@/lib/pso"
+import { runProjectInWebContainer } from "@/lib/webcontainer"
 import {
   runGuardedGeneration,
   watchdog,
@@ -413,6 +414,22 @@ function GeneratorInner() {
         "system",
         `Projeto "${res.projectName}" concluído · ${res.provider} · ${res.files.length} ficheiros · PSO 4/4`
       )
+
+      /* Upgrade para dev server REAL — WebContainer (bolt.diy style):
+         npm install + npm run dev dentro do browser. Se falhar,
+         mantém o preview bundled que já está visível. */
+      if (res.files.some((f) => f.path.replace(/^\.?\//, "") === "package.json")) {
+        pushMsg("system", "⛨ A levantar dev server real no browser (WebContainer)...")
+        runProjectInWebContainer(res.files, (m) => pushLog(m))
+          .then((wcUrl) => {
+            setPreviewUrl(wcUrl)
+            aiPreviewRef.current = true
+            pushMsg("system", `✓ Dev server ativo — a tua app real a correr: ${wcUrl}`)
+          })
+          .catch((err) => {
+            pushMsg("system", `⚠ WebContainer indisponível (${err instanceof Error ? err.message : "erro"}) — preview bundled mantido`)
+          })
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido"
       if (msg.startsWith("NO_KEY:")) {
