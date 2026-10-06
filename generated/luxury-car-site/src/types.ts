@@ -2,7 +2,8 @@ export interface Car {
   id: string;
   name: string;
   price: string;
-  power: string;
+  horsepower: number;
   engine: string;
   imageUrl: string;
+  description: string;
 }
