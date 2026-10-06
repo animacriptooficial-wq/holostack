@@ -1,5 +1,5 @@
 {
-  "name": "car-site",
+  "name": "luxury-car-site",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -10,11 +10,11 @@
   "dependencies": {
     "react": "^18.2.0",
     "zustand": "^4.1.0",
-    "lucide-react": "^0.2.6"
+    "lucide-react": "^0.11.0"
   },
   "devDependencies": {
-    "typescript": "^5.1.3",
-    "tailwindcss": "^3.3.0",
-    "vite": "^4.3.9"
+    "typescript": "^5.0.0",
+    "tailwindcss": "^3.0.0",
+    "vite": "^4.0.0"
   }
 }
