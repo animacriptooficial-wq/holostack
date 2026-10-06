@@ -6,25 +6,17 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 /* ============================================================
-   COMPILADOR DE PREVIEW REAL
+   COMPILADOR DE PREVIEW REAL — SELF-CONTAINED
    Bundla o código-fonte gerado (TSX/TS/JS/CSS) com esbuild em
-   memória e devolve um documento HTML5 self-contained cujo JS
-   corre via <script type="module"> + importmap (esm.sh) para as
-   dependências npm. Determinístico — sem IA, sem bundler local.
+   memória. As dependências npm são descarregadas do esm.sh no
+   SERVIDOR e inlinadas no bundle — o documento final não faz
+   nenhum fetch externo em runtime. Determinístico, sem IA.
    ============================================================ */
 
 interface PreviewFile {
   path: string
   content: string
 }
-
-const NODE_BUILTINS = new Set([
-  "fs", "path", "os", "crypto", "http", "https", "url", "util", "stream",
-  "events", "buffer", "child_process", "net", "tls", "zlib", "querystring",
-  "assert", "module", "process", "node:fs", "node:path", "node:os",
-  "node:crypto", "node:http", "node:https", "node:url", "node:util",
-  "node:stream", "node:events", "node:buffer", "node:child_process",
-])
 
 function normPath(p: string): string {
   return p.replace(/\\/g, "/").replace(/^\.?\//, "").replace(/\/+/g, "/")
@@ -43,7 +35,7 @@ function resolveRel(from: string, spec: string): string {
 }
 
 function loaderFor(path: string): esbuild.Loader {
-  const ext = path.split(".").pop()?.toLowerCase() || ""
+  const ext = path.split("?")[0].split(".").pop()?.toLowerCase() || ""
   switch (ext) {
     case "tsx": return "tsx"
     case "ts": return "ts"
@@ -54,12 +46,12 @@ function loaderFor(path: string): esbuild.Loader {
     case "svg": case "png": case "jpg": case "jpeg": case "gif":
     case "webp": case "ico": case "woff": case "woff2": case "ttf":
       return "dataurl"
-    default: return "text"
+    default: return "js"
   }
 }
 
-const RESOLVE_EXTS = ["", ".tsx", ".ts", ".jsx", ".js", ".json"]
-const RESOLVE_INDEX = ["/index.tsx", "/index.ts", "/index.jsx", "/index.js"]
+const RESOLVE_EXTS = ["", ".tsx", ".ts", ".jsx", ".js", ".mjs", ".json"]
+const RESOLVE_INDEX = ["/index.tsx", "/index.ts", "/index.jsx", "/index.js", "/index.mjs"]
 
 function pkgRoot(spec: string): string {
   const parts = spec.split("/")
@@ -71,6 +63,25 @@ function cleanVersion(v: string | undefined): string {
   const cleaned = v.trim().replace(/^[\^~<>=\s]+/, "")
   return /^[\w.\-]+$/.test(cleaned) && cleaned !== "latest" && cleaned !== "*" ? cleaned : ""
 }
+
+/* Versões default para deps que o código usa mas o package.json
+   gerado esqueceu de declarar */
+const DEFAULT_VERSIONS: Record<string, string> = {
+  react: "18.3.1",
+  "react-dom": "18.3.1",
+  "react-router-dom": "6.30.0",
+  "react-router": "6.30.0",
+  zustand: "4.5.7",
+  "lucide-react": "0.460.0",
+  axios: "1.10.0",
+  "framer-motion": "11.18.2",
+}
+
+const NODE_BUILTINS_RE =
+  /^(node:)?(fs|path|os|crypto|http|https|url|util|stream|events|buffer|child_process|net|tls|zlib|querystring|assert|module|process|tty|dns|readline|worker_threads|perf_hooks|async_hooks|vm|v8|inspector|constants|sys|punycode|string_decoder|domain)$/
+
+const STUB_MODULE =
+  "const p=new Proxy(function(){},{get:(t,k)=>k==='default'?p:p,apply:()=>p,construct:()=>p});export default p;export const __esModule=true;"
 
 function escapeInline(code: string, tag: string): string {
   return code.replace(new RegExp(`</${tag}`, "gi"), `<\\/${tag}`)
@@ -92,7 +103,39 @@ export async function POST(req: Request) {
   const fileMap = new Map<string, string>()
   for (const f of files) fileMap.set(normPath(f.path), f.content)
 
-  /* ---- Entry point: script src do index.html, ou convenções Vite/React ---- */
+  /* ---- Versões das deps a partir do package.json gerado ---- */
+  const versions = new Map<string, string>()
+  const pkgJson = fileMap.get("package.json")
+  if (pkgJson) {
+    try {
+      const pj = JSON.parse(pkgJson)
+      for (const scope of [pj.dependencies, pj.devDependencies]) {
+        for (const [name, v] of Object.entries(scope || {})) {
+          const cv = cleanVersion(v as string)
+          if (cv) versions.set(name, cv)
+        }
+      }
+    } catch { /* package.json inválido — usa defaults */ }
+  }
+  /* react/react-dom forçados à mesma versão — mismatch = Invalid hook call */
+  const reactVer = versions.get("react") || DEFAULT_VERSIONS.react
+  versions.set("react", reactVer)
+  versions.set("react-dom", reactVer)
+
+  function depUrl(spec: string): string {
+    const root = pkgRoot(spec)
+    const ver = versions.get(root) || DEFAULT_VERSIONS[root] || ""
+    const sub = spec.slice(root.length)
+    const base = `https://esm.sh/${root}${ver ? "@" + ver : ""}${sub}`
+    /* ?bundle inlines sub-deps; ?deps fixa react partilhado p/ dedupe */
+    const params: string[] = ["bundle"]
+    if (root !== "react" && root !== "react-dom") {
+      params.push(`deps=react@${reactVer},react-dom@${reactVer}`)
+    }
+    return `${base}?${params.join("&")}`
+  }
+
+  /* ---- Entry point: script src do index.html, ou convenções ---- */
   let entry = ""
   let htmlTitle = "Preview"
   const indexHtml = fileMap.get("index.html") || ""
@@ -128,15 +171,12 @@ export async function POST(req: Request) {
     entry = normPath(anyCode.path)
   }
 
-  /* ---- O código monta React sozinho (createRoot/render)? ---- */
+  /* ---- Monta sozinho? Senão criamos entry virtual com createRoot ---- */
   const mountsItself = files.some((f) =>
-    /createRoot|ReactDOM\.render|hydrateRoot|\.render\(/.test(f.content)
+    /createRoot|ReactDOM\.render|hydrateRoot/.test(f.content)
   )
-
-  /* Se não monta, criamos um entry virtual que importa o App e monta */
   if (!mountsItself) {
-    const appFile =
-      fileMap.has("src/App.tsx") ? "src/App.tsx"
+    const appFile = fileMap.has("src/App.tsx") ? "src/App.tsx"
       : fileMap.has("src/App.jsx") ? "src/App.jsx"
       : entry
     fileMap.set(
@@ -151,17 +191,45 @@ createRoot(el).render(React.createElement(App))`
     entry = "__preview_entry__.tsx"
   }
 
-  /* ---- Bundling esbuild com filesystem virtual ---- */
+  /* ---- Plugins: filesystem virtual + resolução HTTP (esm.sh) ---- */
+  const httpCache = new Map<string, Promise<string>>()
+  async function fetchText(url: string): Promise<string> {
+    const cached = httpCache.get(url)
+    if (cached) return cached
+    const p = fetch(url, { redirect: "follow" })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status} em ${url}`)
+        return r.text()
+      })
+    httpCache.set(url, p)
+    return p
+  }
+
   const vfsPlugin: esbuild.Plugin = {
     name: "vfs",
     setup(build) {
       build.onResolve({ filter: /.*/ }, (args) => {
         const spec = args.path
+
+        /* já é URL absoluta (resolvida dentro de módulo http) */
+        if (/^https?:\/\//.test(spec)) {
+          return { path: spec, namespace: "http" }
+        }
+        /* relativo dentro de módulo http → resolve contra o importer */
+        if (args.namespace === "http") {
+          try {
+            const resolved = new URL(spec, args.importer).toString()
+            return { path: resolved, namespace: "http" }
+          } catch {
+            return { path: spec, namespace: "stub" }
+          }
+        }
         if (args.kind === "entry-point") {
           const cand = normPath(spec)
           if (fileMap.has(cand)) return { path: cand, namespace: "vfs" }
-          return { path: spec, external: true }
+          return { path: spec, namespace: "stub" }
         }
+        /* alias @/ → src/ */
         if (spec.startsWith("@/")) {
           const base = "src/" + spec.slice(2)
           const candidates = [
@@ -171,8 +239,9 @@ createRoot(el).render(React.createElement(App))`
           for (const c of candidates) {
             if (fileMap.has(c)) return { path: c, namespace: "vfs" }
           }
-          return { path: spec, external: true }
+          return { path: spec, namespace: "stub" }
         }
+        /* relativo local */
         if (spec.startsWith(".") || spec.startsWith("/")) {
           const base = resolveRel(normPath(args.importer), spec)
           const candidates = [
@@ -182,13 +251,29 @@ createRoot(el).render(React.createElement(App))`
           for (const c of candidates) {
             if (fileMap.has(c)) return { path: c, namespace: "vfs" }
           }
-          return { path: spec, external: true }
+          return { path: spec, namespace: "stub" }
         }
-        return { path: spec, external: true }
+        /* bare import → dep npm via esm.sh, inlinada no bundle */
+        if (NODE_BUILTINS_RE.test(spec)) return { path: spec, namespace: "stub" }
+        return { path: depUrl(spec), namespace: "http" }
       })
+
       build.onLoad({ filter: /.*/, namespace: "vfs" }, (args) => ({
         contents: fileMap.get(args.path),
         loader: loaderFor(args.path),
+      }))
+
+      build.onLoad({ filter: /.*/, namespace: "http" }, async (args) => {
+        const source = await fetchText(args.path)
+        const clean = args.path.split("?")[0]
+        /* CSS importado de CDN descartado — não é JS */
+        if (/\.css$/i.test(clean)) return { contents: "", loader: "js" }
+        return { contents: source, loader: loaderFor(clean) }
+      })
+
+      build.onLoad({ filter: /.*/, namespace: "stub" }, () => ({
+        contents: STUB_MODULE,
+        loader: "js",
       }))
     },
   }
@@ -201,9 +286,11 @@ createRoot(el).render(React.createElement(App))`
       format: "esm",
       jsx: "automatic",
       jsxImportSource: "react",
+      minify: true,
       outfile: "preview.js",
       plugins: [vfsPlugin],
       logLevel: "silent",
+      define: { "process.env.NODE_ENV": '"production"' },
     })
 
     let js = ""
@@ -220,59 +307,13 @@ createRoot(el).render(React.createElement(App))`
       )
     }
 
-    /* ---- Imports bare que ficaram no bundle (externals reais) ---- */
-    const specifiers = new Set<string>()
-    const specRe = /(?:from|import)\s*\(?\s*["']([^"'.][^"']*)["']/g
-    let sm: RegExpExecArray | null
-    while ((sm = specRe.exec(js))) {
-      const s = sm[1]
-      if (s && !s.startsWith("@/") && !s.startsWith("data:")) specifiers.add(s)
-    }
-
-    const versions = new Map<string, string>()
-    const pkgJson = fileMap.get("package.json")
-    if (pkgJson) {
-      try {
-        const pj = JSON.parse(pkgJson)
-        for (const scope of [pj.dependencies, pj.devDependencies]) {
-          for (const [name, v] of Object.entries(scope || {})) {
-            const cv = cleanVersion(v as string)
-            if (cv) versions.set(name, cv)
-          }
-        }
-      } catch { /* package.json inválido — usa defaults */ }
-    }
-    /* react e react-dom têm de ser o mesmo número de versão —
-       mismatch causa "Invalid hook call" no iframe */
-    const reactVer = versions.get("react") || "18.3.1"
-    versions.set("react", reactVer)
-    versions.set("react-dom", versions.get("react-dom") || reactVer)
-
-    const BUILTIN_STUB =
-      "data:text/javascript;charset=utf-8," +
-      encodeURIComponent("const p=new Proxy({},{get:()=>()=>p});export default p;")
-
-    const imports: Record<string, string> = {}
-    for (const spec of specifiers) {
-      if (NODE_BUILTINS.has(spec)) { imports[spec] = BUILTIN_STUB; continue }
-      const root = pkgRoot(spec)
-      if (NODE_BUILTINS.has(root)) { imports[spec] = BUILTIN_STUB; continue }
-      const ver = versions.get(root) || ""
-      const sub = spec.slice(root.length)
-      const base = `https://esm.sh/${root}${ver ? "@" + ver : ""}${sub}`
-      imports[spec] =
-        root === "react" ? base : `${base}?external=react,react-dom`
-      if (!imports[root]) {
-        imports[root] =
-          root === "react"
-            ? `https://esm.sh/${root}${ver ? "@" + ver : ""}`
-            : `https://esm.sh/${root}${ver ? "@" + ver : ""}?external=react,react-dom`
-      }
-      const prefix = `${root}/`
-      if (!imports[prefix]) {
-        imports[prefix] = `https://esm.sh/${root}${ver ? "@" + ver : ""}/`
-      }
-    }
+    /* Tailwind CDN se o projeto declarar tailwind — className fica funcional */
+    const usesTailwind =
+      files.some((f) => /tailwind\.config\.(ts|js|cjs|mjs)$/i.test(f.path)) ||
+      (pkgJson ? /"tailwindcss"/.test(pkgJson) : false)
+    const tailwindTag = usesTailwind
+      ? `<script src="https://cdn.tailwindcss.com"></script>`
+      : ""
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -280,14 +321,12 @@ createRoot(el).render(React.createElement(App))`
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${htmlTitle.replace(/[<>&"]/g, "")}</title>
+${tailwindTag}
 <style>
 html, body { margin: 0; padding: 0; min-height: 100%; }
 #root { min-height: 100vh; }
 ${css}
 </style>
-<script type="importmap">
-${JSON.stringify({ imports }, null, 0)}
-</script>
 </head>
 <body>
 <div id="root"></div>
