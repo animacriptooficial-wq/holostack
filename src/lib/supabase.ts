@@ -1,9 +1,8 @@
 /* ============================================================
-   SUPABASE REST CLIENT — cloud-native, zero dependência npm
-   Persistência de projetos/ficheiros gerados via PostgREST.
-   Env: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (ou ANON_KEY)
-   Tabela: holostack_files (project text, path text, content text,
-   updated_at timestamptz) — PK composta (project, path)
+   SUPABASE STORAGE CLIENT — cloud-native, zero dependência npm
+   Persistência de ficheiros gerados no bucket público
+   "holostack" via Storage API. Sem SQL, sem tabela.
+   Env: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (sb_secret_)
    ============================================================ */
 
 export interface SupabaseConfig {
@@ -23,52 +22,110 @@ export function supabaseConfig(): SupabaseConfig | null {
   return { url: url.replace(/\/+$/, ""), key }
 }
 
-function headers(cfg: SupabaseConfig, extra?: Record<string, string>): Record<string, string> {
+const BUCKET = "holostack"
+
+function headers(cfg: SupabaseConfig): Record<string, string> {
   return {
     apikey: cfg.key,
     Authorization: `Bearer ${cfg.key}`,
-    "Content-Type": "application/json",
-    ...extra,
   }
 }
 
-/* Upsert em lote — PK (project, path) com merge-duplicates */
+export function supabasePublicUrl(cfg: SupabaseConfig, key: string): string {
+  return `${cfg.url}/storage/v1/object/public/${BUCKET}/${key}`
+}
+
+function contentTypeFor(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase() || ""
+  const map: Record<string, string> = {
+    html: "text/html", css: "text/css", js: "text/javascript",
+    mjs: "text/javascript", json: "application/json", ts: "text/plain",
+    tsx: "text/plain", jsx: "text/plain", md: "text/markdown",
+    txt: "text/plain", svg: "image/svg+xml", png: "image/png",
+    jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp",
+  }
+  return map[ext] || "text/plain"
+}
+
+/* Upload de um ficheiro para o bucket (upsert). Devolve o URL público. */
+export async function supabaseUploadFile(
+  cfg: SupabaseConfig,
+  key: string,
+  content: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${cfg.url}/storage/v1/object/${BUCKET}/${key}`, {
+      method: "POST",
+      headers: {
+        ...headers(cfg),
+        "Content-Type": contentTypeFor(key),
+        "x-upsert": "true",
+        "cache-control": "3600",
+      },
+      body: content,
+    })
+    return res.ok ? supabasePublicUrl(cfg, key) : null
+  } catch {
+    return null
+  }
+}
+
+/* Upsert em lote — cada ficheiro como objeto individual */
 export async function supabaseSaveFiles(
   cfg: SupabaseConfig,
   project: string,
   files: { path: string; content: string }[]
-): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const res = await fetch(`${cfg.url}/rest/v1/holostack_files`, {
-      method: "POST",
-      headers: headers(cfg, { Prefer: "resolution=merge-duplicates" }),
-      body: JSON.stringify(
-        files.map((f) => ({ project, path: f.path, content: f.content }))
-      ),
-    })
-    if (!res.ok) {
-      const t = await res.text()
-      return { ok: false, error: `Supabase ${res.status}: ${t.slice(0, 200)}` }
-    }
-    return { ok: true }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "rede" }
+): Promise<{ ok: boolean; saved: number; error?: string }> {
+  let saved = 0
+  let lastErr = ""
+  for (const f of files) {
+    const url = await supabaseUploadFile(cfg, `${project}/${f.path}`, f.content)
+    if (url) saved++
+    else lastErr = `falha upload: ${f.path}`
   }
+  if (saved === 0 && files.length > 0) {
+    return { ok: false, saved: 0, error: lastErr || "nenhum ficheiro gravado" }
+  }
+  return { ok: true, saved }
 }
 
+/* Lista recursivamente os objetos de um projeto e descarrega cada um.
+   Pastas no Storage têm id null — desce até encontrar ficheiros. */
 export async function supabaseReadFiles(
   cfg: SupabaseConfig,
   project: string
 ): Promise<{ path: string; content: string }[]> {
+  const files: { path: string; content: string }[] = []
+
+  async function walk(prefix: string, depth: number) {
+    if (depth > 6) return
+    const listRes = await fetch(`${cfg.url}/storage/v1/object/list/${BUCKET}`, {
+      method: "POST",
+      headers: { ...headers(cfg), "Content-Type": "application/json" },
+      body: JSON.stringify({ prefix, limit: 200, offset: 0 }),
+    })
+    if (!listRes.ok) return
+    const entries = (await listRes.json()) as { name: string; id: string | null }[]
+    if (!Array.isArray(entries)) return
+    for (const e of entries) {
+      if (!e.name) continue
+      if (e.id === null) {
+        await walk(`${prefix}${e.name}/`, depth + 1)
+        continue
+      }
+      const key = `${prefix}${e.name}`
+      const res = await fetch(supabasePublicUrl(cfg, key), { cache: "no-store" }).catch(() => null)
+      if (!res?.ok) continue
+      const content = await res.text()
+      if (content.length > 512 * 1024) continue
+      files.push({ path: key.slice(`${project}/`.length), content })
+    }
+  }
+
   try {
-    const res = await fetch(
-      `${cfg.url}/rest/v1/holostack_files?project=eq.${encodeURIComponent(project)}&select=path,content`,
-      { headers: headers(cfg), cache: "no-store" }
-    )
-    if (!res.ok) return []
-    const rows = (await res.json()) as { path: string; content: string }[]
-    return Array.isArray(rows) ? rows : []
+    await walk(`${project}/`, 0)
+    return files
   } catch {
-    return []
+    return files
   }
 }

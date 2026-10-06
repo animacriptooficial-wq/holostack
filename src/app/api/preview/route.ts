@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import * as esbuild from "esbuild"
 import { promises as fsp } from "fs"
 import path from "path"
+import { supabaseConfig, supabaseUploadFile } from "@/lib/supabase"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -344,13 +345,22 @@ ${escapeInline(js, "script")}
        na mesma e o cliente usa srcDoc como fallback. */
     let url = ""
     const slug = (body.project || "preview").replace(/[^\w-]/g, "-").toLowerCase()
-    try {
-      const dir = path.join(process.cwd(), "public", "previews")
-      await fsp.mkdir(dir, { recursive: true })
-      await fsp.writeFile(path.join(dir, `${slug}.html`), html, "utf8")
-      url = `/previews/${slug}.html`
-    } catch {
-      url = ""
+    /* 1) Supabase Storage — URL público na nuvem (funciona em produção) */
+    const sb = supabaseConfig()
+    if (sb) {
+      const publicUrl = await supabaseUploadFile(sb, `${slug}/preview.html`, html)
+      if (publicUrl) url = publicUrl
+    }
+    /* 2) Local — public/previews (dev) */
+    if (!url) {
+      try {
+        const dir = path.join(process.cwd(), "public", "previews")
+        await fsp.mkdir(dir, { recursive: true })
+        await fsp.writeFile(path.join(dir, `${slug}.html`), html, "utf8")
+        url = `/previews/${slug}.html`
+      } catch {
+        url = ""
+      }
     }
 
     return NextResponse.json({ ok: true, html, url, bundled: true, entry })
