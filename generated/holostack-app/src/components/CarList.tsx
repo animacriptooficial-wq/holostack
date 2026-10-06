@@ -1,7 +1,6 @@
 import React from 'react';
 import { Car } from '../types';
-import CarCard from './CarCard';
-import styles from './CarList.module.css';
+import './CarList.css';
 
 interface CarListProps {
   cars: Car[];
@@ -9,9 +8,13 @@ interface CarListProps {
 
 const CarList: React.FC<CarListProps> = ({ cars }) => {
   return (
-    <div className={styles.list}>
+    <div className="car-list">
       {cars.map((car) => (
-        <CarCard key={car.id} car={car} />
+        <div key={car.id} className="car-item">
+          <h2>{car.make} {car.model}</h2>
+          <p>Year: {car.year}</p>
+          <p>Price: ${car.price}</p>
+        </div>
       ))}
     </div>
   );
