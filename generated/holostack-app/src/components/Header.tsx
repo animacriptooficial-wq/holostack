@@ -1,10 +1,9 @@
 import React from 'react';
-import './Header.css';
 
 const Header: React.FC = () => {
   return (
-    <header className="app-header">
-      <h1>Car Showcase</h1>
+    <header style={{ backgroundColor: '#222', padding: '16px', color: '#fff', textAlign: 'center' }}>
+      <h1>Luxury Cars</h1>
     </header>
   );
 };

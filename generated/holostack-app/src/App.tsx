@@ -1,14 +1,16 @@
 import React from 'react';
-import './App.css';
 import Header from './components/Header';
 import CarList from './components/CarList';
-import { useCars } from './hooks/useCars';
+
+const cars = [
+  { model: 'Model S', brand: 'Tesla', price: '$80,000', imageUrl: 'https://example.com/tesla.jpg' },
+  { model: 'Ghost', brand: 'Rolls Royce', price: '$300,000', imageUrl: 'https://example.com/rolls.jpg' },
+  { model: 'Chiron', brand: 'Bugatti', price: '$3,000,000', imageUrl: 'https://example.com/bugatti.jpg' }
+];
 
 const App: React.FC = () => {
-  const { cars } = useCars();
-
   return (
-    <div className="app">
+    <div style={{ backgroundColor: '#111', minHeight: '100vh', color: '#fff' }}>
       <Header />
       <CarList cars={cars} />
     </div>

@@ -1,19 +1,18 @@
 import React from 'react';
-import styles from './CarCard.module.css';
-import { Car } from '../types';
 
 interface CarCardProps {
-  car: Car;
+  model: string;
+  brand: string;
+  price: string;
+  imageUrl: string;
 }
 
-const CarCard: React.FC<CarCardProps> = ({ car }) => {
+const CarCard: React.FC<CarCardProps> = ({ model, brand, price, imageUrl }) => {
   return (
-    <div className={styles.card}>
-      <img src={car.image} alt={car.model} className={styles.image} />
-      <div className={styles.details}>
-        <h2 className={styles.model}>{car.model}</h2>
-        <p className={styles.price}>${car.price}</p>
-      </div>
+    <div style={{ border: '1px solid #444', borderRadius: '8px', padding: '16px', backgroundColor: '#333', color: '#fff', maxWidth: '300px' }}>
+      <img src={imageUrl} alt={`${brand} ${model}`} style={{ width: '100%', borderRadius: '8px' }} />
+      <h2>{brand} {model}</h2>
+      <p>Price: {price}</p>
     </div>
   );
 };
