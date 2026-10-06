@@ -232,14 +232,40 @@ function GeneratorInner() {
               setFiles(d.files)
               filesRef.current = d.files
               setActiveFile((prev) => prev || d.files[0]?.path || null)
-              pushMsg(
-                "system",
-                `⛨ Workspace re-hidratado do disco — ${d.fileCount} ficheiros lidos de generated/${projName}`
+              /* dedupe — a msg já pode estar persistida de loads anteriores */
+              setMessages((prev) =>
+                prev.some((m) => m.text.includes("re-hidratado"))
+                  ? prev
+                  : [
+                      ...prev,
+                      {
+                        role: "system" as const,
+                        text: `⛨ Workspace re-hidratado do disco — ${d.fileCount} ficheiros lidos de generated/${projName}`,
+                        time: now(),
+                      },
+                    ]
               )
             }
             /* Preview guardado inválido (tela branca) → recompila a partir do código-fonte */
             const restoredPreview = s.previewHtml || ""
             const filesForPreview = d?.files?.length ? d.files : s.files || []
+            /* Upgrade WebContainer ao re-hidratar: se o projeto tem package.json,
+               o dev server real volta a correr sem nova geração */
+            if (filesForPreview.some((f: GeneratedFile) => f.path.replace(/^\.?\//, "") === "package.json")) {
+              pushMsg("system", "⛨ A re-ativar dev server real (WebContainer)...")
+              runProjectInWebContainer(filesForPreview, (m) => pushLog(m), (pm) => {
+                if (pm.type?.startsWith("PREVIEW_") && pm.message)
+                  pushMsg("system", `⚠ preview: ${pm.message.slice(0, 160)}`)
+              })
+                .then(({ url }) => {
+                  setPreviewUrl(url)
+                  aiPreviewRef.current = true
+                  pushMsg("system", `✓ Dev server re-ativado: ${url}`)
+                })
+                .catch((err) => {
+                  pushLog(`WebContainer re-hidratação falhou: ${err instanceof Error ? err.message : "erro"}`)
+                })
+            }
             if (validatePreviewHtml(restoredPreview).length > 0 && filesForPreview.length > 0) {
               pushMsg("system", "⛨ Preview anterior inválido — a bundlar o código real...")
               bundleRuntimePreview(filesForPreview, projName)
@@ -420,11 +446,14 @@ function GeneratorInner() {
          mantém o preview bundled que já está visível. */
       if (res.files.some((f) => f.path.replace(/^\.?\//, "") === "package.json")) {
         pushMsg("system", "⛨ A levantar dev server real no browser (WebContainer)...")
-        runProjectInWebContainer(res.files, (m) => pushLog(m))
-          .then((wcUrl) => {
-            setPreviewUrl(wcUrl)
+        runProjectInWebContainer(res.files, (m) => pushLog(m), (pm) => {
+          if (pm.type?.startsWith("PREVIEW_") && pm.message)
+            pushMsg("system", `⚠ preview: ${pm.message.slice(0, 160)}`)
+        })
+          .then(({ url }) => {
+            setPreviewUrl(url)
             aiPreviewRef.current = true
-            pushMsg("system", `✓ Dev server ativo — a tua app real a correr: ${wcUrl}`)
+            pushMsg("system", `✓ Dev server ativo — a tua app real a correr: ${url}`)
           })
           .catch((err) => {
             pushMsg("system", `⚠ WebContainer indisponível (${err instanceof Error ? err.message : "erro"}) — preview bundled mantido`)
@@ -694,7 +723,7 @@ function GeneratorInner() {
       <Sidebar />
       <div className="flex-1 ml-64">
         <Header />
-        <main className="pt-20 h-screen flex flex-col">
+        <main className="pt-20 min-h-screen flex flex-col">
           {/* Slice progress bar */}
           <div className="px-5 py-3 border-b border-border bg-surface/60 flex items-center gap-3 shrink-0">
             <span className="text-xs font-semibold text-textSecondary uppercase tracking-wider">PSO</span>
@@ -745,7 +774,7 @@ function GeneratorInner() {
             </div>
           </div>
 
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden">
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0">
             {/* LEFT — Agent Chat */}
             <div className="flex flex-col border-r border-border bg-surface/50">
               <div className="px-5 py-3 border-b border-border flex items-center justify-between">
@@ -924,7 +953,7 @@ function GeneratorInner() {
 
               <div className="flex-1 overflow-hidden p-4">
                 {activeTab === "preview" && (
-                  <div className="h-full flex flex-col rounded-xl overflow-hidden border border-border">
+                  <div className="h-[75vh] flex flex-col rounded-xl overflow-hidden border border-border">
                     <div className="bg-surface2 px-4 py-2 flex items-center gap-2 border-b border-border shrink-0">
                       <div className="flex gap-1.5">
                         <span className="w-3 h-3 rounded-full bg-error/80" />
@@ -939,12 +968,12 @@ function GeneratorInner() {
                           : "a aguardar primeira fatia"}
                       </span>
                     </div>
-                    {previewHtml ? (
+                    {previewHtml || previewUrl ? (
                       <iframe
                         src={previewUrl || undefined}
                         srcDoc={previewUrl ? undefined : previewHtml}
                         title="Preview ao vivo"
-                        sandbox="allow-scripts allow-same-origin"
+                        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
                         className="flex-1 w-full bg-white"
                       />
                     ) : (
@@ -968,7 +997,7 @@ function GeneratorInner() {
                 )}
 
                 {activeTab === "files" && (
-                  <div className="h-full grid grid-cols-5 gap-3">
+                  <div className="h-[75vh] grid grid-cols-5 gap-3">
                     <div className="col-span-2 bg-surface2 rounded-xl border border-border p-3 overflow-y-auto scrollbar-thin">
                       <p className="text-xs font-semibold text-textSecondary uppercase mb-2 px-1">Árvore</p>
                       {files.length > 0 ? (
@@ -1010,7 +1039,7 @@ function GeneratorInner() {
                 )}
 
                 {activeTab === "build" && (
-                  <div className="h-full bg-surface2 rounded-xl border border-border p-4 overflow-y-auto scrollbar-thin font-mono">
+                  <div className="h-[75vh] bg-surface2 rounded-xl border border-border p-4 overflow-y-auto scrollbar-thin font-mono">
                     {buildLog.length > 0 ? (
                       buildLog.map((line, i) => (
                         <p key={i} className="text-xs text-textSecondary leading-relaxed">
