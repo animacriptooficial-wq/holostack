@@ -1,21 +1,16 @@
-# Car Showcase
+# Luxury Car Site
 
-A simple car showcase web application built with React and TypeScript, using Vite and Tailwind CSS.
+This project is a web application to showcase luxury cars using React and Tailwind CSS.
 
-## Setup
+## Development
 
-1. Clone the repository.
-2. Run `npm install` to install dependencies.
-3. Run `npm run dev` to start the development server.
+- Install dependencies: `npm install`
+- Start the development server: `npm run dev`
 
-## Features
+## Build
 
-- View a list of cars
-- Responsive design
+- Build for production: `npm run build`
 
-## Technologies
+## Preview
 
-- React
-- TypeScript
-- Vite
-- Tailwind CSS
+- Preview the production build: `npm run preview`
