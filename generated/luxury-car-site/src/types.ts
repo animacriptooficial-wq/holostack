@@ -1,9 +1,8 @@
-export interface Car {
+export type Car = {
   id: string;
   name: string;
   price: string;
-  horsepower: number;
-  engine: string;
-  imageUrl: string;
+  power: string;
+  image: string;
   description: string;
-}
+};
