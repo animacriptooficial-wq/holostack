@@ -165,6 +165,28 @@ export function validatePreviewHtml(html: string): string[] {
   if (!/<\/html>/i.test(html)) {
     errors.push("previewHtml: tag </html> por fechar")
   }
+
+  /* Referências relativas/externas — no iframe srcDoc NÃO existe
+     servidor nem bundler: src="./x", src="/src/main.tsx",
+     href="styles.css" rendem página branca */
+  const externalRefs = html.match(
+    /(?:src|href)\s*=\s*["'](?!https?:|data:|#|mailto:|\/\/)[^"']+["']/gi
+  )
+  if (externalRefs) {
+    errors.push(
+      `previewHtml: referência externa/relativa proibida (${externalRefs[0].slice(0, 60)}) — o preview tem de ser 100% standalone, todo o CSS/JS inline`
+    )
+  }
+
+  /* <div id="root"></div> sem script inline → tela branca garantida */
+  const visibleText = html.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, "").trim()
+  const hasInlineScript = /<script(?![^>]+src\s*=)[^>]*>[\s\S]{30,}?<\/script>/i.test(html)
+  if (visibleText.length < 30 && !hasInlineScript) {
+    errors.push(
+      "previewHtml: sem conteúdo visível nem script inline — renderizaria página branca"
+    )
+  }
+
   if (typeof DOMParser !== "undefined") {
     const doc = new DOMParser().parseFromString(html, "text/html")
     if (doc.querySelector("parsererror")) {
@@ -212,6 +234,8 @@ Shape: { "files": [{ "path": "...", "content": "COMPLETE file content" }], "prev
 Continuação — ${kind}. Gera APENAS a Fatia 3 — INTERFACE & DESIGN:
 - Componentes visuais completos (src/components/, src/App.tsx, estilos)
 - previewHtml: documento HTML standalone (CSS+JS inline, dark theme elegante) que renderiza a aplicação FUNCIONAL e navegável num iframe — botões, menus e estado a funcionar em JS
+- PROIBIDO no previewHtml: src= ou href= relativos (./x, /src/..., styles.css), <script src>, imports — tudo tem de estar INLINE, pois o iframe não tem servidor nem bundler
+- A app tem de mostrar conteúdo visível real: HTML direto ou JS inline que cria a UI — nunca um <div id="root"></div> vazio
 Never truncate. No TODOs.
 ${ctx}`
     default:
@@ -219,7 +243,7 @@ ${ctx}`
 Shape: { "files": [...], "previewHtml": "FINAL polished standalone HTML5 doc", "plan": "resumo em PT do projeto", "projectName": "kebab-case" }
 Continuação — ${kind}. Gera APENAS a Fatia 4 — INTEGRAÇÃO & ATIVAÇÃO:
 - Configs de integração (${mode === "program" ? "src-tauri/tauri.conf.json, capacitor.config.ts, " : ""}vite.config.ts, tailwind.config.ts, README.md, index.html)
-- previewHtml FINAL: a versão definitiva e polida da aplicação funcional
+- previewHtml FINAL: a versão definitiva e polida — 100% standalone (SEM src=/href= relativos, SEM <script src>), conteúdo visível garantido
 - plan + projectName
 Never truncate. No TODOs.
 ${ctx}`
