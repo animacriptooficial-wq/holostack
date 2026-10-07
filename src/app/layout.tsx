@@ -8,6 +8,8 @@ import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
 
+export const dynamic = "force-dynamic"
+
 export const metadata: Metadata = {
   title: "HoloStack",
   description: "Ecosystemo unificado de desenvolvimento com IA",
