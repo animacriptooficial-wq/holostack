@@ -99,10 +99,27 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeId>("carbon")
+export function ThemeProvider({
+  children,
+  initialTheme,
+}: {
+  children: ReactNode
+  initialTheme?: string | null
+}) {
+  const [theme, setThemeState] = useState<ThemeId>(
+    THEME_OPTIONS.some((t) => t.id === initialTheme)
+      ? (initialTheme as ThemeId)
+      : "carbon"
+  )
 
   useEffect(() => {
+    if (initialTheme && THEME_OPTIONS.some((t) => t.id === initialTheme)) {
+      setThemeState(initialTheme as ThemeId)
+      try {
+        localStorage.setItem(THEME_KEY, initialTheme)
+      } catch {}
+      return
+    }
     try {
       const stored = localStorage.getItem(THEME_KEY) as ThemeId | null
       if (stored && THEME_OPTIONS.some((t) => t.id === stored)) {
@@ -111,7 +128,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } catch {
       localStorage.removeItem(THEME_KEY)
     }
-  }, [])
+  }, [initialTheme])
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme)
@@ -119,7 +136,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = (next: ThemeId) => {
     setThemeState(next)
-    localStorage.setItem(THEME_KEY, next)
+    try {
+      localStorage.setItem(THEME_KEY, next)
+    } catch {}
+    fetch("/api/theme", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: next }),
+    }).catch(() => {})
   }
 
   return (

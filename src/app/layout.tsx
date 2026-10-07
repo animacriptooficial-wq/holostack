@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import { AuthProvider } from "@/lib/auth"
 import { ThemeProvider } from "@/lib/theme"
+import { getSiteTheme } from "@/lib/theme-store"
 import { BackToTop } from "@/components/BackToTop"
 import "./globals.css"
 
@@ -12,15 +13,16 @@ export const metadata: Metadata = {
   description: "Ecosystemo unificado de desenvolvimento com IA",
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const siteTheme = await getSiteTheme()
   return (
-    <html lang="pt-BR" data-theme="carbon">
+    <html lang="pt-BR" data-theme={siteTheme ?? "carbon"}>
       <body className={inter.className}>
-        <ThemeProvider>
+        <ThemeProvider initialTheme={siteTheme}>
           <AuthProvider>{children}</AuthProvider>
           <BackToTop />
         </ThemeProvider>

@@ -54,7 +54,7 @@ export default function AdminAppearancePage() {
           <div>
             <h3 className="text-base font-semibold text-text">Seletor de Temas</h3>
             <p className="text-xs text-textSecondary">
-              A escolha é persistida em localStorage e aplica-se globalmente
+              A escolha fica gravada na nuvem e aplica-se a todo o site
             </p>
           </div>
         </div>
@@ -106,7 +106,7 @@ export default function AdminAppearancePage() {
             </span>
           </span>
           <span className="text-xs text-textSecondary font-mono">
-            persistido em localStorage · holostack_theme
+            tema global · Supabase + localStorage
           </span>
         </div>
       </div>
