@@ -6,8 +6,10 @@ import { useRouter } from "next/navigation"
 import Header from "@/components/layout/Header"
 import Sidebar from "@/components/layout/Sidebar"
 import PSOStatus from "@/components/dashboard/PSOStatus"
+import PsoEngine from "@/components/dashboard/PsoEngine"
 import MetricsGrid from "@/components/dashboard/MetricsGrid"
 import APIMesh from "@/components/dashboard/APIMesh"
+import { PLANS } from "@/lib/plans"
 import { 
   Globe, 
   Smartphone, 
@@ -184,64 +186,14 @@ export default function Dashboard() {
     { name: "Webhooks", uptime: "99.85%", status: "Operacional", ok: true },
   ]
 
-  const plans = [
-    {
-      name: "Grátis",
-      price: "R$ 0,00",
-      period: "/mês",
-      features: ["1 projeto", "100 créditos de IA/mês", "Subdomínio holostack.app", "Suporte da comunidade"],
-      cta: "Começar grátis",
-      highlight: false,
-    },
-    {
-      name: "Inicial",
-      price: "R$ 29,00",
-      period: "/mês",
-      features: ["5 projetos", "1.000 créditos de IA/mês", "Domínio próprio", "Suporte por e-mail"],
-      cta: "Assinar agora",
-      highlight: false,
-    },
-    {
-      name: "Pro",
-      price: "R$ 57,00",
-      period: "/mês",
-      features: ["20 projetos", "5.000 créditos de IA/mês", "Modelos premium", "Deploys ilimitados"],
-      cta: "Assinar agora",
-      highlight: false,
-    },
-    {
-      name: "Business",
-      price: "R$ 97,00",
-      period: "/mês",
-      features: ["Projetos ilimitados", "15.000 créditos de IA/mês", "Colaboração (5 assentos)", "Analytics avançado"],
-      cta: "Assinar agora",
-      highlight: false,
-    },
-    {
-      name: "Escala",
-      price: "R$ 147,00",
-      period: "/mês",
-      features: ["Tudo do Business", "40.000 créditos de IA/mês", "SSO e permissões", "SLA 99,9%"],
-      cta: "Assinar agora",
-      highlight: false,
-    },
-    {
-      name: "Empresarial",
-      price: "R$ 247,00",
-      period: "/mês",
-      features: ["100.000 créditos de IA/mês", "Infraestrutura dedicada", "Gerente de conta", "Onboarding assistido"],
-      cta: "Falar com vendas",
-      highlight: false,
-    },
-    {
-      name: "Ultimate",
-      price: "R$ 497,00",
-      period: "/mês",
-      features: ["Créditos ilimitados", "White-label completo", "Suporte 24/7 dedicado", "Acesso antecipado a recursos"],
-      cta: "Falar com vendas",
-      highlight: true,
-    },
-  ]
+  const plans = PLANS.map((p) => ({
+    name: p.name,
+    price: p.priceUSD === null ? "Sob consulta" : `$${p.priceUSD}`,
+    period: p.priceUSD === null ? "" : "/mês",
+    features: p.features,
+    cta: p.cta,
+    highlight: p.highlight,
+  }))
 
   const handleCreate = () => {
     if (prompt.trim()) {
@@ -409,6 +361,7 @@ export default function Dashboard() {
               {/* Right Column - Quick Stats + PSO Status */}
               <div className="col-span-3 space-y-6">
                 <PSOStatus projectName="HoloStack" />
+                <PsoEngine />
                 <div className="card">
                   <h3 className="text-lg font-semibold text-text mb-4">Quick Stats</h3>
                   <div className="space-y-4">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth"
@@ -24,10 +24,93 @@ const adminNav = [
   { name: "Segurança", href: "/x7k2m9q4-admin/security", icon: ShieldCheck },
 ]
 
+const ADMIN_KEYS_FLAG = "holostack_admin_keys_ok"
+
+function AccessKeysGate({ onUnlock }: { onUnlock: () => void }) {
+  const [keys, setKeys] = useState(["", "", ""])
+  const [error, setError] = useState("")
+  const [checking, setChecking] = useState(false)
+
+  const submit = async () => {
+    if (keys.some((k) => !k.trim())) {
+      setError("As 3 chaves são obrigatórias")
+      return
+    }
+    setChecking(true)
+    setError("")
+    try {
+      const res = await fetch("/api/admin/verify-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keys }),
+      })
+      if (res.ok) {
+        sessionStorage.setItem(ADMIN_KEYS_FLAG, "1")
+        onUnlock()
+      } else {
+        setError("Acesso negado — bloqueio de segurança")
+        setKeys(["", "", ""])
+      }
+    } catch {
+      setError("Falha na validação — tenta novamente")
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <div className="card max-w-md w-full space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-error/20 border border-error/40 rounded-lg flex items-center justify-center">
+            <Lock className="w-5 h-5 text-error" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-text">3º Fator — Chaves de Acesso</h2>
+            <p className="text-xs text-textSecondary">
+              Tripla validação criptografada na borda
+            </p>
+          </div>
+        </div>
+
+        {keys.map((k, i) => (
+          <input
+            key={i}
+            type="password"
+            value={k}
+            onChange={(e) => {
+              const next = [...keys]
+              next[i] = e.target.value
+              setKeys(next)
+            }}
+            placeholder={`Chave de acesso ${i + 1}`}
+            className="w-full bg-surface2 border border-border rounded-lg px-4 py-2.5 text-sm text-text placeholder-textSecondary focus:outline-none focus:border-error font-mono"
+          />
+        ))}
+
+        {error && <p className="text-xs text-error font-medium">{error}</p>}
+
+        <button
+          onClick={submit}
+          disabled={checking}
+          className="w-full bg-primary text-black font-bold py-2.5 rounded-lg hover:bg-primaryDark transition-colors disabled:opacity-50"
+        >
+          {checking ? "A validar..." : "Desbloquear painel"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const { user, isAuthenticated, isLoading, twoFactor, twoFactorVerified, logout } = useAuth()
+  const [keysOk, setKeysOk] = useState(false)
+
+  useEffect(() => {
+    setKeysOk(sessionStorage.getItem(ADMIN_KEYS_FLAG) === "1")
+  }, [])
 
   useEffect(() => {
     if (isLoading) return
@@ -54,6 +137,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <p className="text-sm text-textSecondary">A verificar permissões de acesso...</p>
       </div>
     )
+  }
+
+  // 3º fator — tripla validação de chaves de acesso (spec §2)
+  if (!keysOk) {
+    return <AccessKeysGate onUnlock={() => setKeysOk(true)} />
   }
 
   return (

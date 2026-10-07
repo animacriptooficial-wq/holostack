@@ -70,6 +70,46 @@ export async function supabaseUploadFile(
   }
 }
 
+/* Apaga um objeto do bucket */
+export async function supabaseDeleteFile(
+  cfg: SupabaseConfig,
+  key: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${cfg.url}/storage/v1/object/${BUCKET}/${key}`, {
+      method: "DELETE",
+      headers: headers(cfg),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+/* Lê um objeto JSON do bucket (via URL pública) */
+export async function supabaseReadJson<T>(
+  cfg: SupabaseConfig,
+  key: string
+): Promise<T | null> {
+  try {
+    const res = await fetch(supabasePublicUrl(cfg, key), { cache: "no-store" })
+    if (!res.ok) return null
+    return (await res.json()) as T
+  } catch {
+    return null
+  }
+}
+
+/* Grava um objeto JSON no bucket (upsert) */
+export async function supabaseWriteJson(
+  cfg: SupabaseConfig,
+  key: string,
+  data: unknown
+): Promise<boolean> {
+  const url = await supabaseUploadFile(cfg, key, JSON.stringify(data))
+  return url !== null
+}
+
 /* Upsert em lote — cada ficheiro como objeto individual */
 export async function supabaseSaveFiles(
   cfg: SupabaseConfig,
