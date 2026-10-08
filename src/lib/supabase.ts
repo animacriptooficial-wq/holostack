@@ -86,6 +86,24 @@ export async function supabaseDeleteFile(
   }
 }
 
+/* Lê um objeto via endpoint autenticado — ignora o CDN da URL pública,
+   que pode servir versões em cache (cache-control: 3600) até 1h. */
+export async function supabaseReadFileAuthed(
+  cfg: SupabaseConfig,
+  key: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${cfg.url}/storage/v1/object/${BUCKET}/${key}`, {
+      headers: headers(cfg),
+      cache: "no-store",
+    })
+    if (!res.ok) return null
+    return await res.text()
+  } catch {
+    return null
+  }
+}
+
 /* Lê um objeto JSON do bucket (via URL pública) */
 export async function supabaseReadJson<T>(
   cfg: SupabaseConfig,

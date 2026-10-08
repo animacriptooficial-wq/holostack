@@ -1,6 +1,6 @@
 import {
   supabaseConfig,
-  supabasePublicUrl,
+  supabaseReadFileAuthed,
   supabaseUploadFile,
 } from "./supabase"
 
@@ -26,16 +26,8 @@ export function isValidThemeId(value: unknown): value is string {
 export async function getSiteTheme(): Promise<string | null> {
   const cfg = supabaseConfig()
   if (!cfg) return null
-  try {
-    const res = await fetch(supabasePublicUrl(cfg, THEME_OBJECT), {
-      cache: "no-store",
-    })
-    if (!res.ok) return null
-    const theme = (await res.text()).trim()
-    return VALID_THEMES.has(theme) ? theme : null
-  } catch {
-    return null
-  }
+  const theme = (await supabaseReadFileAuthed(cfg, THEME_OBJECT))?.trim() ?? ""
+  return VALID_THEMES.has(theme) ? theme : null
 }
 
 export async function setSiteTheme(theme: string): Promise<boolean> {
