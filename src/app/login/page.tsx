@@ -89,7 +89,10 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, isLoading, router, flow])
 
-  const routeAfterAuth = (next: string) => {
+  const routeAfterAuth = (fallback: string) => {
+    // Preserva o destino pedido antes do login (ex: rota admin) —
+    // não sobrescreve holostack_redirect com o fallback.
+    const next = sessionStorage.getItem("holostack_redirect") || fallback
     sessionStorage.setItem("holostack_redirect", next)
     if (twoFactor.enabled && !twoFactorVerified) {
       router.push("/verify-2fa")

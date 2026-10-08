@@ -122,6 +122,14 @@ export default function Setup2FAPage() {
               <p className="text-xs text-textSecondary mb-3">
                 Abra o Google Authenticator ou Authy e aponte a câmara para o código abaixo:
               </p>
+              <div className="flex items-start gap-2 p-2.5 bg-warning/10 border border-warning/30 rounded-lg mb-3">
+                <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+                <p className="text-[11px] text-textSecondary leading-snug">
+                  Se já existir uma entrada <b className="text-text">"HoloStack"</b> antiga no
+                  autenticador, <b className="text-text">apague-a primeiro</b> — códigos de um QR
+                  antigo serão sempre rejeitados.
+                </p>
+              </div>
               <div className="flex justify-center mb-4">
                 <div className="bg-white p-3 rounded-xl">
                   {qrDataUrl ? (

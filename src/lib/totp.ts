@@ -79,7 +79,7 @@ export async function verifyTOTP(secret: string, code: string): Promise<boolean>
   const normalized = code.replace(/\s/g, "")
   if (!/^\d{6}$/.test(normalized)) return false
   const now = Date.now()
-  for (const drift of [-1, 0, 1]) {
+  for (const drift of [-2, -1, 0, 1, 2]) {
     const timestamp = now + drift * TOTP_PERIOD * 1000
     const expected = await generateTOTP(secret, timestamp)
     if (expected === normalized) return true
