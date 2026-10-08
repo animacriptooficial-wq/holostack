@@ -4,6 +4,7 @@ import Header from "@/components/layout/Header"
 import Sidebar from "@/components/layout/Sidebar"
 import APIKeyManagement from "@/components/workspace/APIKeyManagement"
 import { useAuth } from "@/lib/auth"
+import { useTheme, THEME_OPTIONS } from "@/lib/theme"
 import { useRouter } from "next/navigation"
 import {
   Github,
@@ -14,11 +15,13 @@ import {
   User as UserIcon,
   LogOut,
   Link2,
+  Palette,
 } from "lucide-react"
 
 export default function SettingsPage() {
   const router = useRouter()
   const { user, connections, disconnectService, logout } = useAuth()
+  const { theme, setTheme } = useTheme()
 
   const integrationCards = [
     {
@@ -165,6 +168,60 @@ export default function SettingsPage() {
                         </button>
                       )}
                     </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Appearance — global theme switcher */}
+            <div className="card mb-6">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-9 h-9 bg-accent rounded-lg flex items-center justify-center">
+                  <Palette className="w-4 h-4 text-black" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-text">Aparência do Site</h3>
+                  <p className="text-sm text-textSecondary">
+                    10 temas — a escolha fica gravada na nuvem e aplica-se a todo o site
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {THEME_OPTIONS.map((option) => {
+                  const isActive = theme === option.id
+                  return (
+                    <button
+                      key={option.id}
+                      onClick={() => setTheme(option.id)}
+                      className={`text-left rounded-xl border p-3 transition-all duration-300 ${
+                        isActive
+                          ? "border-primary bg-surface2"
+                          : "border-border bg-surface2 hover:border-primary"
+                      }`}
+                      style={isActive ? { boxShadow: "0 0 24px var(--glow)" } : undefined}
+                    >
+                      <div
+                        className="w-full h-14 rounded-lg border border-border mb-2"
+                        style={{
+                          background: `radial-gradient(ellipse at 50% 40%, ${option.swatch.bg} 0%, ${option.swatch.edge} 78%)`,
+                          borderBottom: `3px solid ${option.swatch.accent}`,
+                        }}
+                      />
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: option.swatch.accent }}
+                        />
+                        <span
+                          className={`text-xs font-semibold truncate ${
+                            isActive ? "text-accent" : "text-text"
+                          }`}
+                        >
+                          {option.name}
+                        </span>
+                        {isActive && <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0 ml-auto" />}
+                      </div>
+                    </button>
                   )
                 })}
               </div>
