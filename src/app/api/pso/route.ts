@@ -88,8 +88,16 @@ export async function POST(req: NextRequest) {
   })
 }
 
-/* DELETE — expurgo automático: apaga páginas sem conversão > 30 dias */
-export async function DELETE() {
+/* DELETE — expurgo automático: apaga páginas sem conversão > 30 dias.
+   Quando PSO_CRON_SECRET está configurado, exige Authorization: Bearer. */
+export async function DELETE(req: NextRequest) {
+  const cronSecret = process.env.PSO_CRON_SECRET
+  if (cronSecret) {
+    const auth = req.headers.get("authorization") ?? ""
+    if (auth !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ ok: false, error: "não autorizado" }, { status: 401 })
+    }
+  }
   const cfg = supabaseConfig()
   if (!cfg) {
     return NextResponse.json({ ok: false, error: "Supabase não configurado" }, { status: 503 })

@@ -47,10 +47,17 @@ export default function PsoEngine() {
 
   const purge = async () => {
     if (busy) return
+    const key = localStorage.getItem("holostack_pso_key") ?? window.prompt("Chave de operação (expurgo):")
+    if (!key) return
+    localStorage.setItem("holostack_pso_key", key)
     setBusy("purge")
     try {
-      const res = await fetch("/api/pso", { method: "DELETE" })
+      const res = await fetch("/api/pso", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${key}` },
+      })
       const j = await res.json()
+      if (res.status === 401) localStorage.removeItem("holostack_pso_key")
       setLastResult(j.ok ? `${j.purged} páginas expurgadas` : j.error ?? "falhou")
       refresh()
     } catch {
